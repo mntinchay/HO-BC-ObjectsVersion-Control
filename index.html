@@ -365,7 +365,7 @@ html[data-theme="light"] pre.codeblock{background:#0f1523;color:#dbe4f7;}
    Example:  const CUSTOM_BG_IMAGE_URL = 'https://example.com/your-image.jpg';
    Leave it as '' to keep the generated navy/glossy gradient background.
    ============================================================ */
-const CUSTOM_BG_IMAGE_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BC-ObjectsVersion-Control/refs/heads/main/bgim.jpg';
+const CUSTOM_BG_IMAGE_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BusinessCentral-ObjectandVersion-Monitoring/refs/heads/main/bgim.jpg';
 if(CUSTOM_BG_IMAGE_URL){
   document.documentElement.style.setProperty('--user-bg-url', `url("${CUSTOM_BG_IMAGE_URL}")`);
 }
@@ -378,7 +378,7 @@ if(CUSTOM_BG_IMAGE_URL){
    Example:  const CUSTOM_LOGO_URL = 'https://example.com/your-logo.png';
    Leave it as '' to keep the generated "BC" mark.
    ============================================================ */
-const CUSTOM_LOGO_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BC-ObjectsVersion-Control/main/Logo.png';
+const CUSTOM_LOGO_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BusinessCentral-ObjectandVersion-Monitoring/main/Logo.png';
 let logoLoadWarned = false;
 let logoCheckScheduled = false;
 function brandMarkHtml(){
@@ -826,6 +826,7 @@ function renderLogin(){
         ${loginError?`<div style="font-size:12px;color:var(--danger);margin:-6px 0 14px;">${loginError}</div>`:''}
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px;">Log In</button>
       </form>
+      <p style="text-align:center;font-size:11px;color:var(--text-faint);margin-top:18px;">Demo default password for every seeded account: <code class="inline">Welcome123!</code> — you'll be asked to set your own on first login.</p>
     </div>
   </div>`;
   document.getElementById('authThemeToggle').addEventListener('click', ()=>{ toggleTheme(); });
