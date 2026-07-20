@@ -1456,7 +1456,7 @@ function settingsGeneral(){
   const account = msalInstance ? msalInstance.getActiveAccount() : null;
   return `
   <div class="card" style="max-width:640px;">
-    <div class="section-title"><h3>${icon('link')} Official Storage Location</h3><span class="hint">Fixed — not user-editable</span></div>
+    <div class="section-title"><h3>${icon('link')} Official Storage Location</h3></div>
     <div style="display:flex;flex-direction:column;gap:10px;font-size:12.5px;">
       <div><span style="color:var(--text-faint);">Site</span><br><span class="mono">${SP_HOSTNAME}${SP_SITE_PATH}</span></div>
       <div><span style="color:var(--text-faint);">Folder</span><br><span class="mono">${escapeHtml(SP_FOLDER_PATH)}</span></div>
@@ -1464,7 +1464,6 @@ function settingsGeneral(){
       <div><span style="color:var(--text-faint);">Signed in as</span><br>${account? escapeHtml(account.username) : '<span style="color:var(--text-faint);">not connected</span>'}</div>
       <div><span style="color:var(--text-faint);">Sync status</span><br><span id="syncBadgeInline">${syncStatusLabel()}</span> ${lastSyncedAt?`<span class="hint">(last synced ${timeAgo(lastSyncedAt)})</span>`:''}</div>
     </div>
-    <p class="hint" style="margin-top:14px;">This app has no database of its own — everything reads from and writes straight back to the SharePoint file above. Nothing is ever cached in this browser's local storage.</p>
     <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
       <a class="btn" href="${SP_FOLDER_VIEW_URL}" target="_blank" rel="noopener">${icon('eye')} Open Folder in SharePoint</a>
       <button class="btn" id="syncNowBtn">${icon('history')} Sync Now</button>
@@ -1488,12 +1487,10 @@ function settingsExcel(){
   <div class="grid-2">
     <div class="card">
       <div class="section-title"><h3>${icon('download')} Export to Excel</h3></div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Downloads a workbook with one sheet per record type — <code class="inline">Projects</code>, <code class="inline">Tickets</code>, <code class="inline">storecust</code>, <code class="inline">Objects</code> and <code class="inline">ObjectTypes</code> — including versions, statuses, remarks and every object allocation. Great as a backup, a report, or as a starting template for bulk edits.</p>
       <button class="btn btn-primary" id="exportExcelBtn">${icon('download')} Export Workbook (.xlsx)</button>
     </div>
     <div class="card">
       <div class="section-title"><h3>${icon('upload')} Bulk Import from Excel</h3></div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Upload a workbook using the same sheet layout as the export above to bulk-create or update Projects, Tickets, Store Customization and their Objects in one go. Existing records are matched by their code (Project No. / Year-Month-Ticket No. / Year-Month-Change No.) and updated; new codes are inserted.</p>
       <label class="btn ${locked?'':'btn-primary'}" style="margin:0;">${icon('upload')} Import Workbook (.xlsx)<input type="file" id="importExcelFile" accept=".xlsx,.xls" style="display:none;" ${locked?'disabled':''}></label>
       ${locked?`<div class="hint" style="margin-top:8px;">You don't have setup permission to bulk import.</div>`:''}
     </div>
@@ -1513,8 +1510,7 @@ function settingsExcel(){
       </tbody>
     </table>
     </div>
-    <p class="hint" style="margin-top:10px;">OwnerKind is one of <code class="inline">project</code> / <code class="inline">ticket</code> / <code class="inline">storecust</code>. OwnerCode matches the Code column shown in each list, e.g. <code class="inline">PRJ-3</code>, <code class="inline">TCK-2607-01-02</code>, <code class="inline">STC-2607-01-00</code> — export first to see the exact format. The ticket/storecust code embeds the revision number, so it changes whenever the revision changes; if OwnerCode is out of date, the importer now falls back to matching on <code class="inline">OwnerName</code> (the ticket/storecust Name) instead of failing silently — keep that column filled in as a safety net. Status must be one of Active / Drafting / Pending / Obsolete.</p>
-  </div>`;
+ </div>`;
 }
 function settingsAppearance(){
   return `
@@ -1598,7 +1594,6 @@ function settingsPasswordPolicy(){
       </div>
     </div>
     ${locked?'':`<button class="btn btn-primary" id="savePasswordPolicy">Save Policy</button>`}
-    <p class="hint" style="margin-top:14px;">This is a static, client-side app — password hashes live inside the shared SharePoint database file, visible to anyone with access to that folder, with no server to verify against. Treat this as a workflow simulation of password policy and first-login resets, not production-grade authentication — encourage genuinely strong passwords given the file's visibility.</p>
   </div>`;
 }
 
