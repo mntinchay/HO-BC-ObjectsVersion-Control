@@ -1,0 +1,2827 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BC Object &amp; Version Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.1/lib/msal-browser.min.js" onerror="window.__MSAL_LOAD_FAILED=true"></script>
+<style>
+/* ============================= DESIGN TOKENS ============================= */
+:root{
+  --font-display:'Space Grotesk',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+  /* Navy blue + black glossy palette */
+  --accent1:#3b82f6; --accent2:#1d4ed8; --accent3:#60a5fa;
+  --accent-grad:linear-gradient(135deg,#60a5fa 0%,#2563eb 45%,#0b1226 100%);
+  --accent-grad-mark:linear-gradient(135deg,#7dd3fc 0%,#3b82f6 55%,#1d4ed8 100%);
+  --accent-grad-soft:linear-gradient(135deg,rgba(59,130,246,.18),rgba(29,78,216,.18));
+  --success:#34d399; --success-soft:rgba(52,211,153,.14);
+  --warning:#fbbf24; --warning-soft:rgba(251,191,36,.14);
+  --info:#60a5fa; --info-soft:rgba(96,165,250,.14);
+  --danger:#f87171; --danger-soft:rgba(248,113,113,.14);
+  --obsolete:#94a3b8; --obsolete-soft:rgba(148,163,184,.14);
+  --seg-a:#7dd3fc; --seg-b:#3b82f6; --seg-c:#1d4ed8; --seg-d:#60a5fa;
+  --transition:.18s cubic-bezier(.4,0,.2,1);
+}
+html[data-theme="dark"]{
+  --bg:#02040a;
+  --bg-image:radial-gradient(circle at 10% 4%, rgba(37,99,235,.28), transparent 40%),radial-gradient(circle at 92% 88%, rgba(29,78,216,.22), transparent 46%),radial-gradient(circle at 85% 8%, rgba(96,165,250,.12), transparent 42%),linear-gradient(160deg, #050810 0%, #01030a 55%, #000103 100%);
+  --surface:rgba(0, 0, 0, 0.404);
+  --surface-2:rgba(96,165,250,.1);
+  --surface-solid:#0a0f1e;
+  --sidebar-bg:rgba(3,6,14,.92);
+  --border:rgba(148,180,255,.10);
+  --border-strong:rgba(148,180,255,.22);
+  --text:#eaf0fc;
+  --text-dim:#8a97b8;
+  --text-faint:#535f80;
+  --shadow-lg:0 24px 60px -20px rgba(0,3,12,.8);
+  --shadow-sm:0 2px 10px rgba(0,3,12,.45);
+  --input-bg:rgba(96,165,250,.06);
+  --scrollbar:rgba(148,180,255,.18);
+  --dropdown-bg:#0e1428;
+  --dropdown-text:#eaf0fc;
+}
+html[data-theme="light"]{
+  --bg:#eef2fb;
+  --bg-image:radial-gradient(circle at 8% 4%, rgba(37,99,235,.14), transparent 42%),radial-gradient(circle at 94% 92%, rgba(29,78,216,.10), transparent 46%),radial-gradient(circle at 90% 6%, rgba(96,165,250,.10), transparent 40%),linear-gradient(160deg,#f3f6fd 0%,#e7edfa 100%);
+  --surface:rgba(255,255,255,.72);
+  --surface-2:rgba(37,99,235,.07);
+  --surface-solid:#ffffff;
+  --sidebar-bg:rgba(255,255,255,.85);
+  --border:rgba(15,23,60,.09);
+  --border-strong:rgba(15,23,60,.18);
+  --text:#0b1226;
+  --text-dim:#525c78;
+  --text-faint:#8790a8;
+  --shadow-lg:0 24px 50px -22px rgba(10,20,60,.24);
+  --shadow-sm:0 2px 10px rgba(10,20,60,.08);
+  --input-bg:rgba(15,23,60,.035);
+  --scrollbar:rgba(15,23,60,.15);
+  --dropdown-bg:#ffffff;
+  --dropdown-text:#0b1226;
+}
+*{box-sizing:border-box;}
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+body{margin:0;font-family:var(--font-body);background-color:var(--bg);background-image:var(--bg-image);background-attachment:fixed;background-size:cover;background-position:center;color:var(--text);min-height:100vh;transition:background var(--transition),color var(--transition);}
+/* Dark theme: original navy/black glossy background — layered glow gradients
+   plus a fine film-grain texture (inline SVG data URI, no external image,
+   nothing to break or hotlink). Fully self-contained in this one file. */
+html[data-theme="dark"]{ color-scheme:dark; }
+html[data-theme="light"]{ color-scheme:light; }
+:root{
+  /* Custom background photo, if any, is injected here at runtime by JS
+     (search this file for CUSTOM_BG_IMAGE_URL) — that's the only edit needed.
+     Don't hand-edit this line; an invalid value here silently breaks the
+     entire background-image declaration (that's what turned things black
+     last time). Leave the JS constant empty to keep the generated gradient. */
+  --user-bg-url: none;
+}
+html[data-theme="dark"] body{
+  background-image:
+    radial-gradient(ellipse 900px 700px at 12% -8%, rgba(59,130,246,.32), transparent 100%),
+    radial-gradient(ellipse 820px 820px at 106% 8%, rgba(29,78,216,.30), transparent 55%),
+    radial-gradient(ellipse 1000px 900px at 82% 108%, rgba(37,99,235,.24), transparent 55%),
+    radial-gradient(ellipse 700px 500px at -6% 96%, rgba(125,211,252,.14), transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--user-bg-url),
+    linear-gradient(160deg, #050810 0%, #01030a 55%, #000103 100%);
+  background-size: cover, cover, cover, cover, 140px 140px, cover, cover;
+  background-position: center, center, center, center, center, center, center;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat, no-repeat;
+  background-attachment: fixed, fixed, fixed, fixed, fixed, fixed, fixed;
+}
+/* Light theme: same custom-photo slot, with a translucent white wash on top
+   (photos read dark, so we lighten instead of darken here) plus soft blue
+   glows for the same glossy identity in a bright palette. */
+html[data-theme="light"] body{
+  background-image:
+    linear-gradient(180deg, rgba(59,130,246,.32) 0%, rgba(238,242,251,.68) 100%),
+    radial-gradient(ellipse 900px 700px at 8% -8%, rgba(59,130,246,.14), transparent 55%),
+    radial-gradient(ellipse 820px 820px at 108% 10%, rgba(29,78,216,.10), transparent 52%),
+    radial-gradient(ellipse 1000px 900px at 84% 106%, rgba(37,99,235,.10), transparent 52%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.02 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--user-bg-url),
+    linear-gradient(160deg, #f3f6fd 0%, #e7edfa 100%);
+  background-size: cover, cover, cover, cover, 140px 140px, cover, cover;
+  background-position: center, center, center, center, center, center, center;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat, no-repeat;
+  background-attachment: fixed, fixed, fixed, fixed, fixed, fixed, fixed;
+}
+h1,h2,h3,h4{font-family:var(--font-display);margin:0;letter-spacing:-.01em;}
+p{margin:0;}
+button{font-family:var(--font-body);cursor:pointer;}
+input,select,textarea{font-family:var(--font-body);}
+a{color:inherit;}
+.mono{font-family:var(--font-mono);}
+
+/* ============================= LAYOUT ============================= */
+#app{display:flex;min-height:100vh;}
+.sidebar{
+  width:250px;flex-shrink:0;background:var(--sidebar-bg);backdrop-filter:blur(20px);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  padding:22px 16px;position:sticky;top:0;height:100vh;z-index:40;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px;}
+.brand-mark{width:34px;height:34px;border-radius:10px;background:var(--accent-grad-mark);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:#fff;font-size:14px;box-shadow:0 6px 18px -6px rgba(37,99,235,.65);overflow:hidden;flex-shrink:0;}
+.brand-mark-img{background:var(--surface-solid);}
+.brand-mark-img img{width:100%;height:100%;object-fit:cover;}
+.auth-card .brand-mark{width:44px;height:44px;border-radius:12px;font-size:17px;}
+.brand-text{display:flex;flex-direction:column;line-height:1.15;}
+.brand-text b{font-family:var(--font-display);font-size:14.5px;letter-spacing:-.01em;}
+.brand-text span{font-size:10.5px;color:var(--text-faint);letter-spacing:.04em;text-transform:uppercase;}
+
+.nav-group{margin-bottom:4px;}
+.nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-faint);padding:14px 12px 6px;font-weight:600;}
+.nav-item{
+  display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;color:var(--text-dim);
+  font-size:13.5px;font-weight:500;cursor:pointer;transition:var(--transition);margin-bottom:2px;position:relative;
+}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;opacity:.85;}
+.nav-item:hover{background:var(--surface-2);color:var(--text);}
+.nav-item.active{background:var(--accent-grad-soft);color:var(--text);}
+.nav-item.active::before{content:'';position:absolute;left:-16px;top:50%;transform:translateY(-50%);width:3px;height:60%;border-radius:4px;background:var(--accent-grad);}
+.nav-item .count{margin-left:auto;font-size:10.5px;font-family:var(--font-mono);background:var(--surface-2);padding:1px 6px;border-radius:20px;color:var(--text-dim);}
+
+.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);}
+.user-pill{display:flex;align-items:center;gap:9px;padding:8px;border-radius:10px;background:var(--surface-2);}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--accent-grad-mark);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
+.user-pill select{background:transparent;border:none;color:var(--text);font-size:12px;font-weight:600;width:100%;outline:none;}
+.user-pill .role-tag{font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;padding:16px 30px;
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30;
+  background:var(--surface);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+}
+.topbar h2{font-size:19px;}
+.topbar .sub{font-size:12.5px;color:var(--text-faint);margin-top:2px;}
+.topbar-actions{display:flex;align-items:center;gap:10px;}
+.content{padding:26px 30px 60px;flex:1;}
+
+/* ============================= COMPONENTS ============================= */
+.glass{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--border-strong);
+  background:var(--surface-2);color:var(--text);font-size:13px;font-weight:600;transition:var(--transition);white-space:nowrap;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm);border-color:var(--accent2);}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-primary{background:var(--accent-grad-mark);border:none;color:#fff;box-shadow:0 8px 20px -8px rgba(37,99,235,.6);}
+.btn-primary:hover{filter:brightness(1.1);box-shadow:0 10px 26px -8px rgba(37,99,235,.75);}
+.btn-danger{background:var(--danger-soft);border-color:rgba(248,113,113,.35);color:var(--danger);}
+.btn-ghost{background:transparent;border-color:transparent;}
+.btn-ghost:hover{background:var(--surface-2);border-color:transparent;}
+.btn-icon{padding:8px;border-radius:9px;}
+.btn-sm{padding:6px 11px;font-size:12px;border-radius:8px;}
+.icon{width:15px;height:15px;}
+
+.toggle{position:relative;width:40px;height:22px;border-radius:20px;background:var(--surface-2);border:1px solid var(--border-strong);cursor:pointer;transition:var(--transition);flex-shrink:0;}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-faint);transition:var(--transition);}
+.toggle.on{background:var(--accent-grad);border-color:transparent;}
+.toggle.on::after{left:20px;background:#fff;}
+
+.card{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;box-shadow:var(--shadow-sm);}
+
+/* auth screens (login / change password) */
+.auth-wrap{width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;}
+.auth-card{width:100%;max-width:420px;padding:34px 32px;animation:slideUp .25s cubic-bezier(.4,0,.2,1);}
+.card:hover{border-color:var(--border-strong);}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:22px;}
+.stat-card{padding:18px 20px;position:relative;overflow:hidden;}
+.stat-card .stat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;background:var(--accent-grad-soft);}
+.stat-card .stat-icon svg{width:18px;height:18px;}
+.stat-card .stat-value{font-family:var(--font-display);font-size:28px;font-weight:700;}
+.stat-card .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px;}
+.stat-card .stat-delta{position:absolute;top:18px;right:18px;font-size:10.5px;font-family:var(--font-mono);padding:3px 8px;border-radius:20px;}
+
+.grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+@media(max-width:1100px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+
+.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-title h3{font-size:15px;}
+.section-title .hint{font-size:11.5px;color:var(--text-faint);}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:600;padding:0 12px 10px;border-bottom:1px solid var(--border);}
+tbody td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr{transition:var(--transition);}
+tbody tr.clickable:hover{background:var(--surface-2);cursor:pointer;}
+.table-wrap{overflow-x:auto;}
+.empty-row td{text-align:center;color:var(--text-faint);padding:36px 12px;font-size:12.5px;}
+
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
+.badge-dot{width:6px;height:6px;border-radius:50%;}
+.badge.active{background:var(--success-soft);color:var(--success);}
+.badge.active .badge-dot{background:var(--success);}
+.badge.drafting{background:var(--info-soft);color:var(--info);}
+.badge.drafting .badge-dot{background:var(--info);}
+.badge.pending{background:var(--warning-soft);color:var(--warning);}
+.badge.pending .badge-dot{background:var(--warning);}
+.badge.obsolete{background:var(--obsolete-soft);color:var(--obsolete);}
+.badge.obsolete .badge-dot{background:var(--obsolete);}
+.badge.kind-project{background:rgba(125,211,252,.14);color:#7dd3fc;}
+.badge.kind-ticket{background:rgba(59,130,246,.16);color:#60a5fa;}
+.badge.kind-storecust{background:rgba(29,78,216,.20);color:#93b8fb;}
+.badge.shared{background:var(--warning-soft);color:var(--warning);}
+
+/* signature element: version segment chip */
+.vchip{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.02em;border-radius:8px;padding:4px 9px;border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);background:rgba(96,165,250,.12);color:var(--accent1);}
+.vchip.sm{font-size:10.5px;padding:2px 7px;}
+
+.progress{height:7px;border-radius:20px;background:var(--surface-2);overflow:hidden;}
+.progress > div{height:100%;border-radius:20px;background:var(--accent-grad);}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab{padding:10px 16px;font-size:13px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;transition:var(--transition);}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--text);border-color:var(--accent2);}
+
+.form-row{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.form-row label{font-size:12px;font-weight:600;color:var(--text-dim);}
+.form-row .hint{font-size:11px;color:var(--text-faint);font-weight:400;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+input[type=text],input[type=url],input[type=number],input[type=email],input[type=password],select,textarea{
+  background:var(--input-bg);border:1px solid var(--border-strong);border-radius:9px;padding:10px 12px;color:var(--text);
+  font-size:13px;width:100%;outline:none;transition:var(--transition);
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent1);box-shadow:0 0 0 3px rgba(59,130,246,.18);}
+textarea{resize:vertical;min-height:64px;}
+select{appearance:none;color-scheme:dark;background-color:var(--dropdown-bg);color:var(--dropdown-text);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238d96ac'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px;}
+html[data-theme="light"] select{color-scheme:light;}
+/* Native <option> list background/text follows the active theme instead of the OS default (usually white) */
+select option{background-color:var(--dropdown-bg);color:var(--dropdown-text);}
+select optgroup{background-color:var(--dropdown-bg);color:var(--dropdown-text);}
+.readonly-field{background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:9px;padding:10px 12px;font-family:var(--font-mono);font-size:13px;color:var(--text-dim);}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);}
+
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(4,6,12,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;z-index:100;overflow-y:auto;animation:fadeIn .15s ease;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{width:100%;max-width:720px;background:var(--surface-solid);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);animation:slideUp .2s cubic-bezier(.4,0,.2,1);}
+.modal.modal-wide{max-width:1180px;}
+@keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);}
+.modal-head h3{font-size:16.5px;}
+.modal-body{padding:22px 24px;max-height:70vh;overflow-y:auto;}
+.split-body{display:grid;grid-template-columns:3fr 7fr;align-items:start;}
+.split-pane{padding:22px 24px;max-height:74vh;overflow-y:auto;}
+.split-pane.pane-left{border-right:1px solid var(--border);}
+.split-pane-head{position:sticky;top:-22px;background:var(--surface-solid);margin:-22px -24px 14px;padding:16px 24px 12px;border-bottom:1px solid var(--border);z-index:1;}
+@media(max-width:820px){
+  .split-body{grid-template-columns:1fr;}
+  .split-pane{max-height:none;overflow-y:visible;}
+  .split-pane.pane-left{border-right:none;border-bottom:1px solid var(--border);}
+  .split-pane-head{position:static;margin:0 0 14px;padding:0 0 12px;}
+}
+.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border);}
+.close-x{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);background:transparent;border:none;}
+.close-x:hover{background:var(--surface-2);color:var(--text);}
+
+.obj-table{width:100%;border-collapse:collapse;}
+.obj-table th{text-align:left;font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.03em;padding:0 8px 8px;border-bottom:1px solid var(--border-strong);}
+.obj-table td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.obj-table tbody tr:hover{background:var(--surface-2);}
+.obj-table td.obj-id-cell{font-family:var(--font-mono);font-size:12.5px;color:var(--text-dim);white-space:nowrap;}
+.obj-table .obj-type-select,.obj-table .obj-desc-input{width:100%;margin:0;}
+.obj-table td.obj-actions{text-align:right;width:1%;white-space:nowrap;}
+.obj-row-dup td{background:rgba(248,113,113,.08);box-shadow:inset 0 0 0 1px var(--danger);}
+.obj-row-dup td:first-child{box-shadow:inset 1px 0 0 var(--danger), inset 0 1px 0 var(--danger), inset 0 -1px 0 var(--danger);}
+.obj-row-dup td:last-child{box-shadow:inset -1px 0 0 var(--danger), inset 0 1px 0 var(--danger), inset 0 -1px 0 var(--danger);}
+@media(max-width:520px){ .obj-table, .obj-table thead, .obj-table tbody, .obj-table th, .obj-table td, .obj-table tr{display:block;} .obj-table thead{display:none;} .obj-table tr{border-bottom:1px solid var(--border-strong);padding:8px 0;} .obj-table td{border-bottom:none;padding:4px 0;} }
+.obj-add-btn{border:1px dashed var(--border-strong);border-radius:10px;padding:10px;text-align:center;font-size:12.5px;color:var(--text-dim);width:100%;background:transparent;margin-top:10px;}
+.obj-add-btn:hover{border-color:var(--accent2);color:var(--text);}
+
+.toast-wrap{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:8px;z-index:200;}
+.toast{background:var(--surface-solid);border:1px solid var(--border-strong);padding:12px 16px;border-radius:10px;font-size:12.5px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:10px;animation:slideUp .2s ease;min-width:220px;}
+.toast .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-faint);}
+.empty-state svg{width:40px;height:40px;margin-bottom:12px;opacity:.5;}
+.empty-state h4{color:var(--text-dim);font-size:14px;margin-bottom:6px;}
+.empty-state p{font-size:12.5px;}
+
+.search-input{position:relative;width:260px;}
+.search-input svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-faint);}
+.search-input input{padding-left:32px;}
+
+.filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
+.filter-bar select{width:auto;min-width:130px;}
+
+.bar-list{display:flex;flex-direction:column;gap:12px;}
+.bar-item .bar-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;}
+.bar-item .bar-top .lbl{color:var(--text-dim);font-weight:600;}
+.bar-item .bar-top .val{font-family:var(--font-mono);color:var(--text-faint);}
+
+.range-table-wrap{margin-top:10px;}
+.pill-input{display:flex;gap:8px;align-items:center;}
+.mini-input{width:80px !important;}
+
+code.inline{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-family:var(--font-mono);font-size:12px;}
+pre.codeblock{background:#0a0e1a;border:1px solid var(--border);border-radius:12px;padding:16px;overflow-x:auto;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:#c7d0e8;}
+html[data-theme="light"] pre.codeblock{background:#0f1523;color:#dbe4f7;}
+
+.log-row .log-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.link-chip{font-size:11.5px;padding:2px 8px;border-radius:20px;background:var(--surface-2);color:var(--text-dim);font-family:var(--font-mono);}
+
+@media(max-width:900px){
+  .sidebar{position:fixed;left:-260px;transition:left .2s;height:100vh;}
+  .sidebar.open{left:0;}
+  .form-grid{grid-template-columns:1fr;}
+  .grid-2,.grid-3{grid-template-columns:1fr;}
+  .content{padding:18px;}
+  .topbar{padding:14px 18px;}
+}
+.hamburger{display:none;}
+@media(max-width:900px){.hamburger{display:flex;}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast-wrap" id="toastWrap"></div>
+<script>
+/* ======================================================================
+   BC OBJECT & VERSION CONTROL — single-file SPA
+   Persistence: SharePoint (Microsoft Graph API via MSAL.js). No database
+   of its own, nothing cached in browser localStorage — every load reads
+   live and every change writes live back to one JSON file in the official
+   SharePoint folder (see the OFFICIAL STORAGE LOCATION block below).
+   ====================================================================== */
+
+/* ============================================================
+   >>> PASTE YOUR OWN BACKGROUND IMAGE URL HERE, BETWEEN THE QUOTES <<<
+   This is the ONLY edit needed to set a custom background photo — just
+   the raw link, no url(), no extra quotes needed.
+   Example:  const CUSTOM_BG_IMAGE_URL = 'https://example.com/your-image.jpg';
+   Leave it as '' to keep the generated navy/glossy gradient background.
+   ============================================================ */
+const CUSTOM_BG_IMAGE_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BusinessCentral-ObjectandVersion-Monitoring/refs/heads/main/bgim.jpg';
+if(CUSTOM_BG_IMAGE_URL){
+  document.documentElement.style.setProperty('--user-bg-url', `url("${CUSTOM_BG_IMAGE_URL}")`);
+}
+
+/* ============================================================
+   >>> PASTE YOUR OWN LOGO IMAGE URL HERE, BETWEEN THE QUOTES <<<
+   Just the raw link — no <img>, no quotes to add. Replaces the "BC"
+   brand mark everywhere it appears (sidebar, login, and every connection
+   screen) in one place.
+   Example:  const CUSTOM_LOGO_URL = 'https://example.com/your-logo.png';
+   Leave it as '' to keep the generated "BC" mark.
+   ============================================================ */
+const CUSTOM_LOGO_URL = 'https://raw.githubusercontent.com/mntinchay/HO-BusinessCentral-ObjectandVersion-Monitoring/main/Logo.png';
+let logoLoadWarned = false;
+let logoCheckScheduled = false;
+function brandMarkHtml(){
+  if(CUSTOM_LOGO_URL && !logoCheckScheduled){
+    logoCheckScheduled = true;
+    setTimeout(warnIfLogoFailed, 2000);
+  }
+  return CUSTOM_LOGO_URL
+    ? `<div class="brand-mark brand-mark-img"><img src="${CUSTOM_LOGO_URL}" alt="Logo" onerror="window.__logoLoadFailed=true; this.parentElement.textContent='BC'; this.parentElement.classList.remove('brand-mark-img');"></div>`
+    : `<div class="brand-mark">BC</div>`;
+}
+function warnIfLogoFailed(){
+  if(window.__logoLoadFailed && !logoLoadWarned){
+    logoLoadWarned = true;
+    console.warn(`Logo failed to load from CUSTOM_LOGO_URL: ${CUSTOM_LOGO_URL}\nCheck: (1) exact filename casing — GitHub raw URLs are case-sensitive, (2) the file actually exists at that path/branch, (3) the repo is public, (4) open the URL directly in a new browser tab to see the real HTTP error.`);
+    toast('Custom logo failed to load — falling back to "BC". Check the browser console for details.', 'warning');
+  }
+}
+
+/* ============================================================
+   LOCAL DEV MODE
+   Opening this file directly (file:// — e.g. double-clicking it on your
+   desktop, or a "Reveal in Finder"-style local path) skips the SharePoint
+   connection entirely. This exists purely for fast UI/CSS iteration while
+   editing — it's NOT the official data source and never touches SharePoint.
+   Azure AD also flatly rejects file:// as a redirect URI, so Microsoft
+   sign-in cannot work over file:// anyway; this mode is the only way to
+   preview the app at all when opened that way.
+   Data in this mode is kept in this browser's localStorage (dev-only key)
+   purely so test edits survive a reload while you're iterating — it is
+   never written to SharePoint and never read by the real deployed app.
+   ============================================================ */
+const IS_LOCAL_DEV = window.location.protocol === 'file:';
+const LOCAL_DEV_DB_KEY = 'bcovc_local_dev_db';
+
+/* ============================================================
+   OFFICIAL STORAGE LOCATION — Microsoft SharePoint
+   This app has no database of its own and keeps nothing persisted in the
+   browser. Every load reads live from, and every change writes live back
+   to, one JSON file in this SharePoint folder:
+   >>> ONE-TIME SETUP REQUIRED (your IT/Microsoft 365 admin does this): <<<
+   1. Entra admin center (entra.microsoft.com) → App registrations → New registration
+      - Name: anything, e.g. "BC Object and Version Control"
+      - Supported account types: Single tenant (this organization only)
+      - Redirect URI: platform = Single-page application (SPA),
+        value = the exact URL this app is hosted at (e.g.
+        https://<org>.github.io/<repo>/ — must match exactly, including
+        trailing slash or lack thereof)
+   2. API permissions → Add a permission → Microsoft Graph → Delegated →
+      Sites.ReadWrite.All → then click "Grant admin consent"
+   3. Copy the "Application (client) ID" from the Overview page and paste
+      it below as MSAL_CLIENT_ID. Confirm MSAL_TENANT matches your tenant's
+      domain (healthyoptionsph.onmicrosoft.com is the default guess).
+   Until MSAL_CLIENT_ID is filled in, the app shows a setup screen instead
+   of trying (and failing) to connect.
+   ============================================================ */
+const MSAL_CLIENT_ID = '352803ac-f3a7-4bb6-8499-bc673f68a948'; // <<< PASTE THE AZURE AD APP (CLIENT) ID HERE
+const MSAL_TENANT = 'healthyoptionsph.onmicrosoft.com';
+const MSAL_REDIRECT_URI = window.location.origin + window.location.pathname;
+const GRAPH_SCOPES = ['Sites.ReadWrite.All'];
+
+const SP_HOSTNAME = 'healthyoptionsph.sharepoint.com';
+const SP_SITE_PATH = '/sites/IT-SP';
+const SP_FOLDER_PATH = 'IT Team Folder/27 BC_LS/DevEnvironment/BC Object and Version Control Monitoring';
+const SP_FILE_NAME = 'bcovc-database.json';
+const SP_FOLDER_VIEW_URL = 'https://healthyoptionsph.sharepoint.com/sites/IT-SP/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FIT%2DSP%2FShared%20Documents%2FIT%20Team%20Folder%2F27%20BC%5FLS%2FDevEnvironment%2FBC%20Object%20and%20Version%20Control%20Monitoring&viewid=4a09b0de%2D6cf4%2D4bcc%2D8fbd%2D0c77750b4636';
+
+let msalInstance = null;
+if(typeof msal !== 'undefined' && MSAL_CLIENT_ID){
+  msalInstance = new msal.PublicClientApplication({
+    auth:{ clientId:MSAL_CLIENT_ID, authority:`https://login.microsoftonline.com/${MSAL_TENANT}`, redirectUri:MSAL_REDIRECT_URI },
+    // sessionStorage only — cleared when the tab closes. This holds MSAL's own
+    // short-lived OAuth session, which any browser-based Microsoft login needs
+    // somewhere to live; it is NOT the app database, which never touches disk
+    // and lives only in the SharePoint file above.
+    cache:{ cacheLocation:'sessionStorage', storeAuthStateInCookie:false },
+  });
+}
+let cachedSiteId = null;
+let syncStatus = 'idle'; // idle | saving | synced | error
+let syncError = '';
+let lastSyncedAt = null;
+
+function encodeGraphPath(path){ return path.split('/').map(encodeURIComponent).join('/'); }
+
+async function acquireGraphToken(interactive){
+  if(!msalInstance) throw new Error('Microsoft sign-in is not configured yet.');
+  const accounts = msalInstance.getAllAccounts();
+  if(accounts.length){
+    try{
+      const res = await msalInstance.acquireTokenSilent({ scopes:GRAPH_SCOPES, account:accounts[0] });
+      return res.accessToken;
+    }catch(e){ /* fall through to interactive */ }
+  }
+  if(!interactive) throw new Error('Not signed in to Microsoft.');
+  const res = await msalInstance.loginPopup({ scopes:GRAPH_SCOPES });
+  msalInstance.setActiveAccount(res.account);
+  return res.accessToken;
+}
+async function graphFetch(path, options){
+  options = options || {};
+  const token = await acquireGraphToken(true);
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, { ...options, headers:{ 'Authorization':`Bearer ${token}`, ...(options.headers||{}) } });
+  return res;
+}
+async function getSiteId(){
+  if(cachedSiteId) return cachedSiteId;
+  const res = await graphFetch(`/sites/${SP_HOSTNAME}:${SP_SITE_PATH}`);
+  if(!res.ok) throw new Error(`Could not reach the SharePoint site (HTTP ${res.status}). Check the site path and that Sites.ReadWrite.All has been consented.`);
+  const data = await res.json();
+  cachedSiteId = data.id;
+  return cachedSiteId;
+}
+async function loadDbFromSharePoint(){
+  const siteId = await getSiteId();
+  const res = await graphFetch(`/sites/${siteId}/drive/root:/${encodeGraphPath(SP_FOLDER_PATH)}/${SP_FILE_NAME}:/content`);
+  if(res.status===404) return null; // file doesn't exist yet — first run
+  if(!res.ok) throw new Error(`Could not read the database file from SharePoint (HTTP ${res.status}).`);
+  return await res.json();
+}
+async function saveDbToSharePointNow(dbObj){
+  const siteId = await getSiteId();
+  const res = await graphFetch(`/sites/${siteId}/drive/root:/${encodeGraphPath(SP_FOLDER_PATH)}/${SP_FILE_NAME}:/content`, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dbObj)
+  });
+  if(!res.ok) throw new Error(`Could not save to SharePoint (HTTP ${res.status}).`);
+  return true;
+}
+
+let saveTimer = null, saveInFlight = false, saveQueued = false;
+function saveDB(){
+  if(IS_LOCAL_DEV){
+    try{ localStorage.setItem(LOCAL_DEV_DB_KEY, JSON.stringify(DB)); syncStatus='synced'; lastSyncedAt=new Date().toISOString(); }
+    catch(e){ syncStatus='error'; syncError=e.message; }
+    updateSyncBadge();
+    return;
+  }
+  syncStatus = 'pending'; updateSyncBadge();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSaveToSharePoint, 800);
+}
+async function flushSaveToSharePoint(){
+  if(saveInFlight){ saveQueued = true; return; }
+  saveInFlight = true; syncStatus = 'saving'; updateSyncBadge();
+  try{
+    await saveDbToSharePointNow(DB);
+    syncStatus = 'synced'; lastSyncedAt = new Date().toISOString(); syncError = '';
+  }catch(e){
+    syncStatus = 'error'; syncError = e.message;
+    toast(`Sync to SharePoint failed: ${e.message}`, 'danger');
+  }
+  updateSyncBadge();
+  saveInFlight = false;
+  if(saveQueued){ saveQueued = false; flushSaveToSharePoint(); }
+}
+function updateSyncBadge(){
+  const el = document.getElementById('syncBadge');
+  if(!el) return;
+  if(IS_LOCAL_DEV){ el.textContent = syncStatusLabel(); el.style.color = 'var(--warning)'; return; }
+  const map = {
+    idle:['', ''], pending:['Change pending…', 'var(--text-faint)'], saving:['Saving to SharePoint…', 'var(--info)'],
+    synced:['Synced to SharePoint', 'var(--success)'], error:['Sync failed — click to retry', 'var(--danger)'],
+  };
+  const [label,color] = map[syncStatus]||['',''];
+  el.textContent = label; el.style.color = color;
+}
+
+const ICONS = {
+  dashboard:'<path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>',
+  project:'<path d="M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4M3 7v10l9 4 9-4V7"/>',
+  ticket:'<path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4V7z"/>',
+  storecust:'<path d="M4 21V9l8-6 8 6v12M4 21h16M9 21v-6h6v6"/>',
+  objects:'<path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/>',
+  users:'<path d="M17 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M9.5 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>',
+  settings:'<path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.14.36.4.66.74.85.24.14.5.22.77.24H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
+  logs:'<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 13h6M9 17h6"/>',
+  cicd:'<path d="M12 2l3 5-3 5-3-5 3-5zM12 12l3 5-3 5-3-5 3-5zM2 12l5-3M22 12l-5-3M2 12l5 3M22 12l-5 3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  trash:'<path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/>',
+  edit:'<path d="M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  close:'<path d="M18 6L6 18M6 6l12 12"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
+  sun:'<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>',
+  moon:'<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>',
+  menu:'<path d="M3 12h18M3 6h18M3 18h18"/>',
+  download:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  upload:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  history:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/>',
+  link:'<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>',
+  chevron:'<path d="M9 18l6-6-6-6"/>',
+  layers:'<path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/>',
+  alert:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+  github:'<path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.2 4.2 0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 00-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 00-.1 3.2A4.6 4.6 0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.1-.5 2V21"/>',
+};
+function icon(name,cls){ return `<svg class="icon ${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
+
+/* ---------------------------- DEFAULT SEED DATA ---------------------------- */
+function seedDB(){
+  const objectTypes = [
+    {id:'tab', name:'Table', code:'TAB'},
+    {id:'pag', name:'Page', code:'PAG'},
+    {id:'rep', name:'Report', code:'REP'},
+    {id:'cod', name:'Codeunit', code:'COD'},
+    {id:'que', name:'Query', code:'QUE'},
+    {id:'xml', name:'XMLport', code:'XML'},
+    {id:'enu', name:'Enum', code:'ENU'},
+    {id:'enx', name:'Enum Extension', code:'ENX'},
+    {id:'pst', name:'Permission Set', code:'PST'},
+    {id:'pge', name:'Page Extension', code:'PGE'},
+    {id:'tbe', name:'Table Extension', code:'TBE'},
+    {id:'rpe', name:'Report Extension', code:'RPE'},
+    {id:'int', name:'Interface', code:'INT'},
+  ];
+  const idRanges = [
+    {typeId:'tab', from:50100, to:50149},
+    {typeId:'pag', from:50100, to:50149},
+    {typeId:'rep', from:50100, to:50124},
+    {typeId:'cod', from:50100, to:50149},
+    {typeId:'que', from:50100, to:50109},
+    {typeId:'xml', from:50100, to:50109},
+    {typeId:'enu', from:50100, to:50119},
+    {typeId:'enx', from:50100, to:50119},
+    {typeId:'pst', from:50100, to:50104},
+    {typeId:'pge', from:50100, to:50149},
+    {typeId:'tbe', from:50100, to:50149},
+    {typeId:'rpe', from:50100, to:50109},
+    {typeId:'int', from:50100, to:50109},
+  ];
+  const DEFAULT_PW_HASH = '5826ca9ba601ea29138017a4e2a45870edaae980b871d65d9d2f0a27cc840a71'; // sha256("Welcome123!")
+  const users = [
+    {id:uid(), name:'Alex Ramirez', email:'alex.ramirez@company.com', role:'Administrator',
+      permissions:perm({projects:full(), tickets:full(), storecust:full(), objects:full(), setup:full()}),
+      passwordHash:DEFAULT_PW_HASH, mustChangePassword:true, passwordUpdatedAt:null},
+    {id:uid(), name:'Jamie Cruz', email:'jamie.cruz@company.com', role:'Lead Developer',
+      permissions:perm({projects:full(), tickets:full(), storecust:full(), objects:full(), setup:viewOnly()}),
+      passwordHash:DEFAULT_PW_HASH, mustChangePassword:true, passwordUpdatedAt:null},
+    {id:uid(), name:'Sam Dizon', email:'sam.dizon@company.com', role:'Developer',
+      permissions:perm({
+        projects:{view:true,create:true,modify:true,delete:false},
+        tickets:{view:true,create:true,modify:true,delete:false},
+        storecust:{view:true,create:true,modify:true,delete:false},
+        objects:{view:true,create:true,modify:true,delete:false},
+        setup:viewOnly(),
+      }),
+      passwordHash:DEFAULT_PW_HASH, mustChangePassword:true, passwordUpdatedAt:null},
+  ];
+  return {
+    settings:{
+      theme:'dark',
+      objectTypes, idRanges,
+      webhookUrl:'',
+      github:{owner:'', repo:'', branch:'main', manifestPath:'bc-object-manifest.json'},
+      passwordPolicy:{minLength:8, requireUppercase:true, requireNumber:true, requireSymbol:false},
+      ticketRepoUrl:'',
+      storecustRepoUrl:'',
+    },
+    users,
+    currentUserId: users[0].id,
+    projects:[], tickets:[], storecust:[],
+    logs:[]
+  };
+}
+const PERM_CATS = ['projects','tickets','storecust','objects','setup'];
+function full(){ return {view:true, create:true, modify:true, delete:true}; }
+function viewOnly(){ return {view:true, create:false, modify:false, delete:false}; }
+function none(){ return {view:false, create:false, modify:false, delete:false}; }
+function perm(overrides){
+  overrides = overrides || {};
+  const out = {};
+  PERM_CATS.forEach(cid=>{ out[cid] = Object.assign(none(), overrides[cid] || {}); });
+  return out;
+}
+function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4); }
+
+/* Local-access-only mode (file:// preview) has no real auth to protect and no
+   SharePoint-shared user list to seed — it's a single-browser scratchpad, so
+   it gets one auto-logged-in Guest account instead of the predefined,
+   password-protected SharePoint accounts. */
+function seedLocalDB(){
+  const base = seedDB();
+  const guest = {
+    id:'guest', name:'Guest', email:'guest@local', role:'Guest (Local Access)',
+    permissions:perm({projects:full(), tickets:full(), storecust:full(), objects:full(), setup:full()}),
+    passwordHash:null, mustChangePassword:false, passwordUpdatedAt:null,
+  };
+  base.users = [guest];
+  base.currentUserId = guest.id;
+  return base;
+}
+
+let DB = null; // populated from SharePoint by initApp() before boot() ever runs
+
+/* ============================================================
+   DB NORMALIZATION / MIGRATION
+   Runs on every load (SharePoint, local dev, or manual JSON import) so
+   older saved data never silently breaks against newer code:
+   - Backfills the 'view' permission key (added after 'create/modify/delete'
+     existed) — without this, any pre-existing user loaded from a database
+     saved before 'view' existed would read as view:false for everything
+     and lose access to sections they used to be able to see.
+   - Migrates the older 'onprem' category/array/kind to 'storecust', for
+     any database saved before that rename.
+   ============================================================ */
+function normalizeDB(db){
+  if(!db) return db;
+  if(db.onprem && !db.storecust){ db.storecust = db.onprem; }
+  delete db.onprem;
+  db.storecust = db.storecust || [];
+  db.storecust.forEach(e=>{ if(e.kind==='onprem') e.kind = 'storecust'; });
+  if(db.settings){
+    if(db.settings.onpremRepoUrl !== undefined && db.settings.storecustRepoUrl === undefined){
+      db.settings.storecustRepoUrl = db.settings.onpremRepoUrl;
+    }
+    delete db.settings.onpremRepoUrl;
+    db.settings.storecustRepoUrl = db.settings.storecustRepoUrl || '';
+  }
+  (db.users||[]).forEach(u=>{
+    u.permissions = u.permissions || {};
+    if(u.permissions.onprem && !u.permissions.storecust){ u.permissions.storecust = u.permissions.onprem; }
+    delete u.permissions.onprem;
+    PERM_CATS.forEach(cid=>{
+      const existing = u.permissions[cid] || {};
+      u.permissions[cid] = {
+        view: existing.view !== undefined ? !!existing.view : !!(existing.create || existing.modify || existing.delete),
+        create: !!existing.create, modify: !!existing.modify, delete: !!existing.delete,
+      };
+    });
+  });
+  return db;
+}
+
+/* ---------------------------- STATE ---------------------------- */
+const state = { view:'dashboard', search:'', statusFilter:'', kindFilter:'', settingsTab:'general', modal:null };
+
+function currentUser(){ return DB.users.find(u=>u.id===DB.currentUserId) || DB.users[0]; }
+function can(category, action){
+  const u = currentUser(); if(!u) return false;
+  return !!(u.permissions[category] && u.permissions[category][action]);
+}
+function toast(msg, kind){
+  kind = kind||'info';
+  const colors = {success:'var(--success)', danger:'var(--danger)', info:'var(--info)', warning:'var(--warning)'};
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className='toast';
+  el.innerHTML = `<span class="dot" style="background:${colors[kind]}"></span><span>${msg}</span>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(6px)'; el.style.transition='all .25s'; setTimeout(()=>el.remove(),260); }, 2600);
+}
+function log(action, entity, entityName, details){
+  DB.logs.unshift({id:uid(), timestamp:new Date().toISOString(), user:currentUser()?currentUser().name:'System', action, entity, entityName, details:details||''});
+  saveDB();
+}
+
+/* ============================================================
+   AUTH ENGINE
+   Client-side only — password hashes now live inside the shared
+   SharePoint database file (readable by anyone with folder access)
+   rather than a private per-browser localStorage, with no server to
+   verify against either way. This remains a workflow/UX simulation of
+   password policy and first-login resets, not production-grade auth —
+   if anything, treat it as slightly less private than before given the
+   shared, centrally-visible storage location.
+   ============================================================ */
+const SESSION_KEY = 'bcovc_session_user';
+let authStage = 'login'; // 'login' | 'changepw' | 'app'
+let pendingChangeForced = false;
+let loginError = '';
+
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function passwordPolicy(){ return DB.settings.passwordPolicy || (DB.settings.passwordPolicy = {minLength:8, requireUppercase:true, requireNumber:true, requireSymbol:false}); }
+function validatePassword(pw){
+  const policy = passwordPolicy();
+  pw = pw||'';
+  const checks = [{label:`At least ${policy.minLength} characters`, pass: pw.length>=policy.minLength}];
+  if(policy.requireUppercase) checks.push({label:'At least one uppercase letter (A-Z)', pass:/[A-Z]/.test(pw)});
+  if(policy.requireNumber) checks.push({label:'At least one number (0-9)', pass:/[0-9]/.test(pw)});
+  if(policy.requireSymbol) checks.push({label:'At least one symbol (!@#$...)', pass:/[^A-Za-z0-9]/.test(pw)});
+  return {checks, valid: checks.every(c=>c.pass)};
+}
+function genTempPassword(){
+  const policy = passwordPolicy();
+  const upper='ABCDEFGHJKLMNPQRSTUVWXYZ', lower='abcdefghijkmnopqrstuvwxyz', nums='23456789', syms='!@#$%&*?';
+  let pw = upper[Math.floor(Math.random()*upper.length)] + nums[Math.floor(Math.random()*nums.length)] + syms[Math.floor(Math.random()*syms.length)] + lower[Math.floor(Math.random()*lower.length)];
+  const all = upper+lower+nums+syms;
+  while(pw.length < Math.max(policy.minLength, 8)){ pw += all[Math.floor(Math.random()*all.length)]; }
+  return pw.split('').sort(()=>Math.random()-0.5).join('');
+}
+function paint(){
+  if(authStage==='login') renderLogin();
+  else if(authStage==='changepw') renderChangePassword(pendingChangeForced);
+  else render();
+}
+function boot(){
+  const sid = sessionStorage.getItem(SESSION_KEY);
+  if(sid && DB.users.find(u=>u.id===sid)){
+    DB.currentUserId = sid;
+    const u = currentUser();
+    if(u && u.mustChangePassword){ authStage='changepw'; pendingChangeForced=true; }
+    else { authStage='app'; }
+  } else { authStage='login'; }
+  paint();
+}
+function logout(){
+  sessionStorage.removeItem(SESSION_KEY);
+  if(IS_LOCAL_DEV){
+    sessionStorage.setItem(SESSION_KEY, DB.currentUserId);
+    authStage='app'; paint();
+    toast('Local access mode has no login screen — signed back in as Guest.', 'info');
+    return;
+  }
+  authStage='login'; loginError=''; paint();
+  toast('Logged out.', 'info');
+}
+
+/* ---------------------------- LOGIN SCREEN ---------------------------- */
+function renderLogin(){
+  document.documentElement.setAttribute('data-theme', DB.settings.theme);
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="auth-wrap">
+    <button class="btn btn-icon" id="authThemeToggle" style="position:absolute;top:22px;right:26px;">${icon(DB.settings.theme==='dark'?'sun':'moon')}</button>
+    <div class="glass auth-card">
+      <div class="brand" style="padding:0 0 22px;justify-content:center;">
+        ${brandMarkHtml()}
+        <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+      </div>
+      <h3 style="text-align:center;font-size:16px;margin-bottom:4px;">Sign in</h3>
+      <p style="text-align:center;font-size:12px;color:var(--text-faint);margin-bottom:22px;">Select your account to continue</p>
+      <form id="loginForm">
+        <div class="form-row">
+          <label>User</label>
+          <select id="loginUser">
+            ${DB.users.map(u=>`<option value="${u.id}">${escapeAttr(u.name)} — ${escapeAttr(u.role)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password">
+        </div>
+        ${loginError?`<div style="font-size:12px;color:var(--danger);margin:-6px 0 14px;">${loginError}</div>`:''}
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px;">Log In</button>
+      </form>
+      <p style="text-align:center;font-size:11px;color:var(--text-faint);margin-top:18px;">Demo default password for every seeded account: <code class="inline">Welcome123!</code> — you'll be asked to set your own on first login.</p>
+    </div>
+  </div>`;
+  document.getElementById('authThemeToggle').addEventListener('click', ()=>{ toggleTheme(); });
+  document.getElementById('loginForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const userId = document.getElementById('loginUser').value;
+    const pw = document.getElementById('loginPassword').value;
+    const user = DB.users.find(u=>u.id===userId);
+    if(!user){ loginError='Select a user.'; renderLogin(); return; }
+    const hash = await sha256Hex(pw);
+    if(hash !== user.passwordHash){ loginError='Incorrect password.'; renderLogin(); return; }
+    loginError='';
+    sessionStorage.setItem(SESSION_KEY, user.id);
+    DB.currentUserId = user.id; saveDB();
+    if(user.mustChangePassword){ authStage='changepw'; pendingChangeForced=true; }
+    else { authStage='app'; log('Logged in','user', user.name); }
+    paint();
+  });
+}
+
+/* ---------------------------- CHANGE PASSWORD SCREEN ---------------------------- */
+function renderChangePassword(forced){
+  document.documentElement.setAttribute('data-theme', DB.settings.theme);
+  const app = document.getElementById('app');
+  const u = currentUser();
+  const {checks} = validatePassword('');
+  app.innerHTML = `
+  <div class="auth-wrap">
+    <button class="btn btn-icon" id="authThemeToggle" style="position:absolute;top:22px;right:26px;">${icon(DB.settings.theme==='dark'?'sun':'moon')}</button>
+    <div class="glass auth-card">
+      <div class="brand" style="padding:0 0 18px;justify-content:center;">
+        ${brandMarkHtml()}
+        <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+      </div>
+      <h3 style="text-align:center;font-size:16px;margin-bottom:4px;">${forced?'Set a new password':'Change your password'}</h3>
+      <p style="text-align:center;font-size:12px;color:var(--text-faint);margin-bottom:20px;">
+        ${forced? `Hi ${u.name.split(' ')[0]} — your administrator requires a new password before you continue.` : `Signed in as ${u.name}.`}
+      </p>
+      <form id="changePwForm">
+        ${forced?'':`<div class="form-row"><label>Current Password</label><input type="password" id="cpCurrent" autocomplete="current-password"></div>`}
+        <div class="form-row"><label>New Password</label><input type="password" id="cpNew" autocomplete="new-password"></div>
+        <div class="form-row"><label>Confirm New Password</label><input type="password" id="cpConfirm" autocomplete="new-password"></div>
+        <div id="cpChecklist" style="display:flex;flex-direction:column;gap:5px;margin:2px 0 16px;">
+          ${checks.map(c=>`<div class="cp-check" data-pass="0" style="font-size:11.5px;color:var(--text-faint);display:flex;align-items:center;gap:7px;"><span class="cp-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-faint);"></span>${c.label}</div>`).join('')}
+          <div class="cp-check" data-check="match" style="font-size:11.5px;color:var(--text-faint);display:flex;align-items:center;gap:7px;"><span class="cp-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-faint);"></span>Passwords match</div>
+        </div>
+        <div id="cpError" style="font-size:12px;color:var(--danger);margin:-8px 0 14px;"></div>
+        <div style="display:flex;gap:10px;">
+          ${forced?'':`<button type="button" class="btn" id="cpCancel" style="flex:1;">Cancel</button>`}
+          <button type="submit" class="btn btn-primary" id="cpSubmit" style="flex:1;justify-content:center;" disabled>Save Password</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+  document.getElementById('authThemeToggle').addEventListener('click', ()=>{ toggleTheme(); });
+  const cancelBtn = document.getElementById('cpCancel');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ authStage='app'; paint(); });
+
+  function refreshChecklist(){
+    const pw = document.getElementById('cpNew').value;
+    const confirm = document.getElementById('cpConfirm').value;
+    const {checks, valid} = validatePassword(pw);
+    const rows = document.querySelectorAll('#cpChecklist .cp-check');
+    checks.forEach((c,i)=>{
+      const row = rows[i]; if(!row) return;
+      const dot = row.querySelector('.cp-dot');
+      row.style.color = c.pass ? 'var(--success)' : 'var(--text-faint)';
+      dot.style.background = c.pass ? 'var(--success)' : 'var(--text-faint)';
+    });
+    const matchRow = document.querySelector('#cpChecklist [data-check="match"]');
+    const matches = pw.length>0 && pw===confirm;
+    matchRow.style.color = matches ? 'var(--success)' : 'var(--text-faint)';
+    matchRow.querySelector('.cp-dot').style.background = matches ? 'var(--success)' : 'var(--text-faint)';
+    document.getElementById('cpSubmit').disabled = !(valid && matches);
+  }
+  document.getElementById('cpNew').addEventListener('input', refreshChecklist);
+  document.getElementById('cpConfirm').addEventListener('input', refreshChecklist);
+
+  document.getElementById('changePwForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const errEl = document.getElementById('cpError');
+    errEl.textContent = '';
+    const newPw = document.getElementById('cpNew').value;
+    const confirmPw = document.getElementById('cpConfirm').value;
+    const {valid} = validatePassword(newPw);
+    if(!valid || newPw!==confirmPw){ errEl.textContent='Please satisfy every password requirement.'; return; }
+    if(!forced){
+      const curPw = document.getElementById('cpCurrent').value;
+      const curHash = await sha256Hex(curPw);
+      if(curHash !== u.passwordHash){ errEl.textContent='Current password is incorrect.'; return; }
+    }
+    u.passwordHash = await sha256Hex(newPw);
+    u.mustChangePassword = false;
+    u.passwordUpdatedAt = new Date().toISOString();
+    saveDB();
+    log('Updated','user', u.name, 'Password changed');
+    toast('Password updated.', 'success');
+    authStage='app'; paint();
+  });
+}
+
+
+/* ============================================================
+   VERSIONING ENGINE
+   Project   a.b.c.d  = ProjectNo . Major . Minor . Revision
+   Ticket    j.k.l.m  = YY . MM . TicketNo(reset/month) . Revision
+   storecust    w.x.y.z  = YY . MM . ChangeNo(reset/month) . Revision
+   ============================================================ */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function yymm(){ const d=new Date(); return {yy:pad2(d.getFullYear()%100), mm:pad2(d.getMonth()+1)}; }
+
+function nextProjectNo(){
+  const nums = DB.projects.map(p=>p.projectNo);
+  return nums.length ? Math.max(...nums)+1 : 1;
+}
+function nextTicketNo(yy,mm){
+  const inMonth = DB.tickets.filter(t=>t.year===yy && t.month===mm);
+  const nums = inMonth.map(t=>t.ticketNo);
+  return nums.length ? Math.max(...nums)+1 : 1;
+}
+function nextChangeNo(yy,mm){
+  const inMonth = DB.storecust.filter(t=>t.year===yy && t.month===mm);
+  const nums = inMonth.map(t=>t.changeNo);
+  return nums.length ? Math.max(...nums)+1 : 1;
+}
+function versionStringProject(p){ return [p.projectNo,p.major,p.minor,p.revision].map(intSeg).join('.'); }
+function versionStringTicket(t){ return [t.year,t.month,t.ticketNo,t.revision].map(intSeg).join('.'); }
+function versionStringstorecust(o){ return [o.year,o.month,o.changeNo,o.revision].map(intSeg).join('.'); }
+function versionOf(e){
+  if(e.kind==='project') return versionStringProject(e);
+  if(e.kind==='ticket') return versionStringTicket(e);
+  return versionStringstorecust(e);
+}
+/* Each version segment is treated as a 32-bit signed Integer (max 2,147,483,647).
+   Leading zeros are storage/entry padding only — never shown. E.g. 0000000384 -> 384. */
+function intSeg(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.trunc(n)) : String(v).replace(/^0+(?=\d)/,'');
+}
+function vchip(str, size){
+  const parts = String(str).split('.').map(intSeg);
+  return `<span class="vchip ${size||''}">${parts.join('.')}</span>`;
+}
+function pushHistory(entity, note){
+  entity.history = entity.history || [];
+  entity.history.unshift({version:versionOf(entity), date:new Date().toISOString(), note: note||'Saved', status:entity.status});
+}
+
+/* ---------------------------- OBJECT ID REGISTRY ---------------------------- */
+function allEntities(){ return [...DB.projects, ...DB.tickets, ...DB.storecust]; }
+function typeById(typeId){ return DB.settings.objectTypes.find(t=>t.id===typeId); }
+function rangeFor(typeId){ return DB.settings.idRanges.find(r=>r.typeId===typeId); }
+function usedIdsForType(typeId, excludeEntityId){
+  const used = [];
+  allEntities().forEach(e=>{
+    (e.objects||[]).forEach(o=>{
+      if(o.objectType===typeId && e.id!==excludeEntityId) used.push(o.objectId);
+    });
+  });
+  return used;
+}
+function nextAvailableId(typeId, excludeEntityId, excludeDraftId){
+  const range = rangeFor(typeId);
+  if(!range) return null;
+  const used = new Set(usedIdsForType(typeId, excludeEntityId));
+  // usedIdsForType excludes the entity currently open in the modal (excludeEntityId),
+  // because that entity's *saved* object list is stale the moment the modal is open —
+  // draftObjects is the real, current list. Without this, adding a second object (or
+  // switching a row's type) can silently hand out an ID the entity already holds.
+  draftObjects.forEach(o=>{ if(o.objectType===typeId && o.id!==excludeDraftId && o.objectId!=null) used.add(o.objectId); });
+  const start = Math.max(range.from, (range.last!=null?range.last:range.from-1)+1);
+  for(let i=start;i<=range.to;i++){ if(!used.has(i)) return i; }
+  for(let i=range.from;i<start;i++){ if(!used.has(i)) return i; } // reclaim gaps below the "last used" pointer
+  return null; // exhausted
+}
+function registryRows(){
+  return DB.settings.objectTypes.map(t=>{
+    const range = rangeFor(t.id) || {from:0,to:0};
+    const total = Math.max(0, range.to-range.from+1);
+    const usedIds = usedIdsForType(t.id, null);
+    const uniqueUsed = [...new Set(usedIds)];
+    return {type:t, range, total, usedCount:uniqueUsed.length, available: total-uniqueUsed.length, usedIds:uniqueUsed};
+  });
+}
+function sharedObjects(){
+  const map = {};
+  allEntities().forEach(e=>{
+    (e.objects||[]).forEach(o=>{
+      const key = o.objectType+'#'+o.objectId;
+      map[key] = map[key] || {objectType:o.objectType, objectId:o.objectId, entities:[]};
+      map[key].entities.push({id:e.id, kind:e.kind, name:displayName(e), status:e.status});
+    });
+  });
+  return Object.values(map).filter(v=>v.entities.length>1);
+}
+function displayName(e){ return e.name; }
+function displayCode(e){
+  if(e.kind==='project') return `PRJ-${e.projectNo}`;
+  // ticketNo/changeNo reset every month, so year+month must be part of the
+  // code or two different tickets/storecust changes in different months
+  // would render the exact same code.
+  if(e.kind==='ticket') return `TCK-${e.year}${e.month}-${pad2(e.ticketNo)}-${pad2(e.revision)}`;
+  return `STC-${e.year}${e.month}-${pad2(e.changeNo)}-${pad2(e.revision)}`;
+}
+
+/* ---------------------------- ROUTER / RENDER ---------------------------- */
+const NAV_VIEW_CAT = {dashboard:null, projects:'projects', tickets:'tickets', storecust:'storecust', objects:'objects', users:'setup', settings:'setup', logs:'setup', cicd:'setup'};
+function canViewNav(navId){
+  const cat = NAV_VIEW_CAT[navId];
+  return cat ? can(cat,'view') : true; // dashboard has no gate
+}
+function setView(v){
+  if(!canViewNav(v)){ toast("You don't have permission to view that section.", 'warning'); return; }
+  state.view=v; state.search=''; state.statusFilter=''; state.kindFilter=''; render();
+}
+function render(){
+  document.documentElement.setAttribute('data-theme', DB.settings.theme);
+  if(!canViewNav(state.view)) state.view = 'dashboard'; // permission may have changed under the current user
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    ${renderSidebar()}
+    <div class="main">
+      ${renderTopbar()}
+      <div class="content">${renderView()}</div>
+    </div>
+  `;
+  attachGlobalHandlers();
+}
+
+function renderSidebar(){
+  const nav = [
+    {group:'Overview', items:[
+      {id:'dashboard', label:'Dashboard', icon:'dashboard'},
+    ]},
+    {group:'Work Items', items:[
+      {id:'projects', label:'Projects', icon:'project', count:DB.projects.length},
+      {id:'tickets', label:'Tickets', icon:'ticket', count:DB.tickets.length},
+      {id:'storecust', label:'Store Customization', icon:'storecust', count:DB.storecust.length},
+      {id:'objects', label:'Object ID Listing', icon:'objects'},
+    ]},
+    {group:'Administration', items:[
+      {id:'users', label:'User Management', icon:'users'},
+      {id:'settings', label:'Settings', icon:'settings'},
+      {id:'logs', label:'Logs', icon:'logs'},
+      {id:'cicd', label:'CI/CD', icon:'cicd'},
+    ]},
+  ];
+  const u = currentUser();
+  return `
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      ${brandMarkHtml()}
+      <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+    </div>
+    ${nav.map(g=>{
+      const visibleItems = g.items.filter(it=>canViewNav(it.id));
+      if(!visibleItems.length) return '';
+      return `
+      <div class="nav-group">
+        <div class="nav-label">${g.group}</div>
+        ${visibleItems.map(it=>`
+          <div class="nav-item ${state.view===it.id?'active':''}" data-nav="${it.id}">
+            ${icon(it.icon)}<span>${it.label}</span>
+            ${it.count!==undefined?`<span class="count">${it.count}</span>`:''}
+          </div>`).join('')}
+      </div>`;
+    }).join('')}
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div class="avatar">${initials(u?u.name:'?')}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u?escapeAttr(u.name):''}</div>
+          <div class="role-tag">${u?u.role:''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        ${IS_LOCAL_DEV?'':'<button class="btn btn-sm btn-ghost" id="changePwLink" style="flex:1;">Change Password</button>'}
+        <button class="btn btn-sm btn-ghost" id="logoutBtn" style="flex:1;">Log Out</button>
+      </div>
+    </div>
+  </div>`;
+}
+function initials(name){ return name.split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase(); }
+
+function renderTopbar(){
+  const titles = {
+    dashboard:['Summary Dashboard',''],
+    projects:['Projects','All Healthy Options Projects'],
+    tickets:['Tickets','Ticket Request from FreshService'],
+    storecust:['Store Customization','Store Server Customizations'],
+    objects:['Object ID Listing','Business Central Objects Range'],
+    users:['User Management',''],
+    settings:['Settings',''],
+    logs:['Activity Logs',''],
+    cicd:['CI/CD Integration',''],
+  };
+  const [t,s] = titles[state.view]||['',''];
+  return `
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-icon btn-ghost hamburger" id="hamburgerBtn">${icon('menu')}</button>
+      <div><h2>${t}</h2><div class="sub">${s}</div></div>
+    </div>
+    <div class="topbar-actions">
+      <span id="syncBadge" style="font-size:11px;margin-right:4px;">${syncStatusLabel()}</span>
+      <button class="btn btn-icon" id="themeToggle" title="Toggle theme">${icon(DB.settings.theme==='dark'?'sun':'moon')}</button>
+      ${state.view==='projects'&&can('projects','create')?`<button class="btn btn-primary" data-new="project">${icon('plus')}New Project</button>`:''}
+      ${state.view==='tickets'&&can('tickets','create')?`<button class="btn btn-primary" data-new="ticket">${icon('plus')}New Ticket</button>`:''}
+      ${state.view==='storecust'&&can('storecust','create')?`<button class="btn btn-primary" data-new="storecust">${icon('plus')}New storecust Extension</button>`:''}
+      ${state.view==='users'&&can('setup','create')?`<button class="btn btn-primary" data-new="user">${icon('plus')}Add User</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderView(){
+  switch(state.view){
+    case 'dashboard': return viewDashboard();
+    case 'projects': return viewEntityList('project');
+    case 'tickets': return viewEntityList('ticket');
+    case 'storecust': return viewEntityList('storecust');
+    case 'objects': return viewObjects();
+    case 'users': return viewUsers();
+    case 'settings': return viewSettings();
+    case 'logs': return viewLogs();
+    case 'cicd': return viewCicd();
+    default: return '';
+  }
+}
+
+/* ---------------------------- DASHBOARD ---------------------------- */
+function viewDashboard(){
+  const all = allEntities();
+  const statusCount = s => all.filter(e=>e.status===s).length;
+  const reg = registryRows();
+  const totalRange = reg.reduce((a,r)=>a+r.total,0);
+  const totalUsed = reg.reduce((a,r)=>a+r.usedCount,0);
+  const shared = sharedObjects();
+  const recent = [...DB.projects,...DB.tickets,...DB.storecust].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)).slice(0,6);
+
+  return `
+  <div class="stat-grid">
+    <div class="card stat-card">
+      <div class="stat-icon">${icon('project')}</div>
+      <div class="stat-value">${DB.projects.length}</div>
+      <div class="stat-label">Active Projects</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon">${icon('ticket')}</div>
+      <div class="stat-value">${DB.tickets.length}</div>
+      <div class="stat-label">Tickets Logged</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon">${icon('storecust')}</div>
+      <div class="stat-value">${DB.storecust.length}</div>
+      <div class="stat-label">Store Customization</div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-icon">${icon('objects')}</div>
+      <div class="stat-value">${totalUsed}<span style="font-size:14px;color:var(--text-faint);">/${totalRange}</span></div>
+      <div class="stat-label">Object IDs Allocated</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title"><h3>Status Breakdown</h3><span class="hint">Across all projects, tickets &amp; storecust</span></div>
+      <div class="bar-list">
+        ${['active','drafting','pending','obsolete'].map(s=>{
+          const c = statusCount(s); const pct = all.length? Math.round(c/all.length*100):0;
+          const color = {active:'var(--success)',drafting:'var(--info)',pending:'var(--warning)',obsolete:'var(--obsolete)'}[s];
+          return `<div class="bar-item">
+            <div class="bar-top"><span class="lbl" style="text-transform:capitalize;">${s}</span><span class="val">${c} · ${pct}%</span></div>
+            <div class="progress"><div style="width:${pct}%;background:${color}"></div></div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${shared.length? `<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);">
+        <div class="section-title" style="margin-bottom:10px;"><h3 style="font-size:13px;">${icon('layers')} Shared Objects</h3><span class="hint">${shared.length} object(s) reused across records</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+        ${shared.slice(0,4).map(s=>{
+          const t = typeById(s.objectType);
+          return `<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">
+            <span class="mono">${t?t.code:'?'}${s.objectId}</span>
+            <span class="badge shared">${s.entities.length} records</span>
+          </div>`;
+        }).join('')}
+        </div>
+      </div>`:''}
+    </div>
+
+    <div class="card">
+      <div class="section-title"><h3>Recently Updated</h3></div>
+      ${recent.length? recent.map(e=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+          <span class="badge kind-${e.kind}">${e.kind}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${displayName(e)}</div>
+            <div style="font-size:11px;color:var(--text-faint);">${displayCode(e)}</div>
+          </div>
+          ${vchip(versionOf(e),'sm')}
+        </div>`).join('') : `<div class="empty-state" style="padding:30px 0;"><p>No records yet — create your first project, ticket or extension.</p></div>`}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="section-title"><h3>Object Type Utilization</h3><span class="hint">Used vs. available per ID range</span></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Code</th><th>Range</th><th>Used</th><th>Available</th><th>Utilization</th></tr></thead>
+      <tbody>
+      ${reg.map(r=>{
+        const pct = r.total? Math.round(r.usedCount/r.total*100):0;
+        return `<tr>
+          <td>${r.type.name}</td>
+          <td><code class="inline">${r.type.code}</code></td>
+          <td class="mono">${r.range.from}–${r.range.to}</td>
+          <td>${r.usedCount}</td>
+          <td>${r.available}</td>
+          <td style="min-width:160px;"><div class="progress"><div style="width:${pct}%;background:${pct>85?'var(--danger)':'var(--accent-grad)'}"></div></div></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- ENTITY LIST (projects/tickets/storecust) ---------------------------- */
+function listOf(kind){ return kind==='project'?DB.projects:kind==='ticket'?DB.tickets:DB.storecust; }
+function viewEntityList(kind){
+  let items = listOf(kind);
+  if(state.search){
+    const q = state.search.toLowerCase();
+    items = items.filter(e=> displayName(e).toLowerCase().includes(q) || displayCode(e).toLowerCase().includes(q) || (e.remarks||'').toLowerCase().includes(q));
+  }
+  if(state.statusFilter){ items = items.filter(e=>e.status===state.statusFilter); }
+  items = [...items].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt));
+
+  const nameLabel = kind==='project'?'Project Name':kind==='ticket'?'Ticket No.':'Update Name';
+  const permCat = kind==='project'?'projects':kind==='ticket'?'tickets':'storecust';
+  const globalRepoUrl = kind==='ticket'?DB.settings.ticketRepoUrl:kind==='storecust'?DB.settings.storecustRepoUrl:null;
+
+  return `
+  <div class="filter-bar">
+    <div class="search-input">${icon('search')}<input type="text" id="searchInput" placeholder="Search ${kind}s..." value="${state.search}"></div>
+    <select id="statusFilter">
+      <option value="">All statuses</option>
+      <option value="active" ${state.statusFilter==='active'?'selected':''}>Active</option>
+      <option value="drafting" ${state.statusFilter==='drafting'?'selected':''}>Drafting</option>
+      <option value="pending" ${state.statusFilter==='pending'?'selected':''}>Pending</option>
+      <option value="obsolete" ${state.statusFilter==='obsolete'?'selected':''}>Obsolete</option>
+    </select>
+    ${globalRepoUrl!==null ? (globalRepoUrl
+      ? `<a class="btn btn-sm" href="${escapeAttr(globalRepoUrl)}" target="_blank" rel="noopener">${icon('github')} Shared Repository</a>`
+      : `<span class="hint" style="font-size:11.5px;">No shared repository set — add one in Settings → Repositories</span>`) : ''}
+    <span class="hint" style="color:var(--text-faint);font-size:12px;">${items.length} record(s)</span>
+  </div>
+  <div class="card" style="padding:0;">
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Code</th><th>${nameLabel}</th><th>Version</th><th>Objects</th>${kind==='project'?'<th>Repo</th>':''}<th>Status</th><th>Updated</th><th></th>
+      </tr></thead>
+      <tbody>
+      ${items.length? items.map(e=>`
+        <tr class="clickable" data-view="${kind}:${e.id}">
+          <td class="mono">${displayCode(e)}</td>
+          <td style="font-weight:600;">${displayName(e)}</td>
+          <td>${vchip(versionOf(e))}</td>
+          <td>${(e.objects||[]).length} object(s)</td>
+          ${kind==='project'?`<td onclick="event.stopPropagation()">${e.repoUrl?`<a class="btn btn-icon btn-sm btn-ghost" href="${escapeAttr(e.repoUrl)}" target="_blank" rel="noopener" title="${escapeAttr(e.repoUrl)}">${icon('github')}</a>`:`<span class="hint">—</span>`}</td>`:''}
+          <td><span class="badge ${e.status}"><span class="badge-dot"></span>${cap(e.status)}</span></td>
+          <td style="color:var(--text-faint);font-size:12px;">${timeAgo(e.updatedAt||e.createdAt)}</td>
+          <td style="text-align:right;" onclick="event.stopPropagation()">
+            ${can(permCat,'modify')?`<button class="btn btn-icon btn-sm btn-ghost" data-edit="${kind}:${e.id}">${icon('edit')}</button>`:''}
+            ${can(permCat,'delete')?`<button class="btn btn-icon btn-sm btn-ghost" data-del="${kind}:${e.id}">${icon('trash')}</button>`:''}
+          </td>
+        </tr>`).join('') : `<tr class="empty-row"><td colspan="${kind==='project'?8:7}">${icon('search')}<br>No ${kind}s found. ${can(permCat,'create')?'Create one to get started.':''}</td></tr>`}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+function cap(s){ return s? s[0].toUpperCase()+s.slice(1):''; }
+function timeAgo(iso){
+  if(!iso) return '—';
+  const diff = (Date.now()-new Date(iso).getTime())/1000;
+  if(diff<60) return 'just now';
+  if(diff<3600) return Math.floor(diff/60)+'m ago';
+  if(diff<86400) return Math.floor(diff/3600)+'h ago';
+  if(diff<2592000) return Math.floor(diff/86400)+'d ago';
+  return new Date(iso).toLocaleDateString();
+}
+
+/* ---------------------------- OBJECT ID LISTING VIEW ---------------------------- */
+function viewObjects(){
+  const reg = registryRows();
+  const shared = sharedObjects();
+  return `
+  <div class="grid-2" style="margin-bottom:18px;">
+    <div class="card stat-card"><div class="stat-icon">${icon('objects')}</div><div class="stat-value">${reg.reduce((a,r)=>a+r.usedCount,0)}</div><div class="stat-label">Object IDs in use</div></div>
+    <div class="card stat-card"><div class="stat-icon">${icon('layers')}</div><div class="stat-value">${shared.length}</div><div class="stat-label">Shared across multiple records</div></div>
+  </div>
+
+  <div class="card" style="padding:0;margin-bottom:20px;">
+    <div style="padding:20px 20px 4px;"><div class="section-title"><h3>Object ID Range Listing</h3><span class="hint">Per object type, defined in Settings</span></div></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Object Type</th><th>Code</th><th>Range</th><th>Used</th><th>Available</th><th>Allocated IDs</th></tr></thead>
+      <tbody>
+      ${reg.map(r=>`
+        <tr>
+          <td>${r.type.name}</td>
+          <td><code class="inline">${r.type.code}</code></td>
+          <td class="mono">${r.range.from}–${r.range.to}</td>
+          <td>${r.usedCount}</td>
+          <td>${r.available}${r.available===0?` <span class="badge pending" style="margin-left:4px;">full</span>`:''}</td>
+          <td style="max-width:320px;">
+            ${r.usedIds.length? r.usedIds.sort((a,b)=>a-b).map(id=>`<span class="link-chip" style="margin:2px;">${r.type.code}${id}</span>`).join('') : '<span class="hint">none allocated</span>'}
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;">
+    <div style="padding:20px 20px 4px;"><div class="section-title"><h3>${icon('layers')} Shared Object Registry</h3><span class="hint">Same object ID touched by 2+ projects, tickets or Store Customization</span></div></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Object</th><th>Used By</th><th>Statuses</th></tr></thead>
+      <tbody>
+      ${shared.length? shared.map(s=>{
+        const t = typeById(s.objectType);
+        const statuses = [...new Set(s.entities.map(e=>e.status))];
+        return `<tr>
+          <td class="mono" style="font-weight:600;">${t?t.code:'?'}${s.objectId} <span style="color:var(--text-faint);font-weight:400;">(${t?t.name:''})</span></td>
+          <td>${s.entities.map(e=>`<span class="badge kind-${e.kind}" style="margin:2px;">${displayCode(e)}</span>`).join('')}</td>
+          <td>${statuses.map(st=>`<span class="badge ${st}" style="margin:2px;">${cap(st)}</span>`).join('')} ${statuses.length>1?`<span title="Conflicting statuses across records" style="color:var(--warning);">${icon('alert')}</span>`:''}</td>
+        </tr>`;
+      }).join('') : `<tr class="empty-row"><td colspan="3">No shared objects yet. Objects reused by more than one record will show up here automatically.</td></tr>`}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- USERS VIEW ---------------------------- */
+function viewUsers(){
+  return `
+  <div class="card" style="padding:0;">
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>User</th><th>Role</th><th>Password</th><th>Projects (V/C/M/D)</th><th>Tickets (V/C/M/D)</th><th>storecust (V/C/M/D)</th><th>Objects (V/C/M/D)</th><th>Setup (V/C/M/D)</th><th></th></tr></thead>
+      <tbody>
+      ${DB.users.map(u=>`
+        <tr>
+          <td><div style="display:flex;align-items:center;gap:9px;"><div class="avatar" style="width:26px;height:26px;font-size:10px;">${initials(u.name)}</div><div><div style="font-weight:600;font-size:12.5px;">${u.name}</div><div style="font-size:11px;color:var(--text-faint);">${u.email}</div></div></div></td>
+          <td>${u.role}</td>
+          <td>${u.mustChangePassword?`<span class="badge pending"><span class="badge-dot"></span>Reset required</span>`:`<span class="badge active"><span class="badge-dot"></span>Set</span>`}</td>
+          ${['projects','tickets','storecust','objects','setup'].map(cat=>`
+            <td class="mono" style="font-size:11px;color:var(--text-dim);">
+              ${['view','create','modify','delete'].map(a=>u.permissions[cat][a]?`<span style="color:var(--success);">${a[0].toUpperCase()}</span>`:`<span style="color:var(--text-faint);">${a[0].toUpperCase()}</span>`).join(' ')}
+            </td>`).join('')}
+          <td style="text-align:right;">
+            ${can('setup','modify')?`<button class="btn btn-icon btn-sm btn-ghost" data-edituser="${u.id}">${icon('edit')}</button>`:''}
+            ${can('setup','delete')&&DB.users.length>1?`<button class="btn btn-icon btn-sm btn-ghost" data-deluser="${u.id}">${icon('trash')}</button>`:''}
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Letters indicate <b>V</b>iew / <b>C</b>reate / <b>M</b>odify / <b>D</b>elete permission per category — green means allowed. A user without View access for a category won't see that section in the sidebar at all. Editing a user lets you toggle these individually, set a new password, or force a reset at next login.</p>`;
+}
+
+/* ---------------------------- SETTINGS VIEW ---------------------------- */
+function viewSettings(){
+  const tabs = [['general','General'],['repos','Repositories'],['excel','Excel Import/Export'],['appearance','Appearance'],['objecttypes','Object Types'],['ranges','ID Ranges'],['password','Password Policy']];
+  return `
+  <div class="tabs">
+    ${tabs.map(([id,label])=>`<div class="tab ${state.settingsTab===id?'active':''}" data-stab="${id}">${label}</div>`).join('')}
+  </div>
+  ${state.settingsTab==='general'?settingsGeneral():''}
+  ${state.settingsTab==='repos'?settingsRepositories():''}
+  ${state.settingsTab==='excel'?settingsExcel():''}
+  ${state.settingsTab==='appearance'?settingsAppearance():''}
+  ${state.settingsTab==='objecttypes'?settingsObjectTypes():''}
+  ${state.settingsTab==='ranges'?settingsRanges():''}
+  ${state.settingsTab==='password'?settingsPasswordPolicy():''}
+  `;
+}
+function settingsRepositories(){
+  const locked = !can('setup','modify');
+  return `
+  <div class="card" style="max-width:640px;">
+    <div class="section-title"><h3>${icon('github')} Repository Links</h3></div>
+    <div class="form-row">
+      <label>Project Repositories</label>
+      <div class="readonly-field">Set individually per project — open a project and edit its "Repository URL" field.</div>
+    </div>
+    <div class="form-row">
+      <label>Ticket Repository URL <span class="hint">(one shared repo for every ticket)</span></label>
+      <input type="url" id="ticketRepoUrl" placeholder="https://github.com/org/tickets-repo" value="${escapeAttr(DB.settings.ticketRepoUrl||'')}" ${locked?'disabled':''}>
+    </div>
+    <div class="form-row">
+      <label>storecust Repository URL <span class="hint">(one shared repo for every storecust extension)</span></label>
+      <input type="url" id="storecustRepoUrl" placeholder="https://github.com/org/storecust-repo" value="${escapeAttr(DB.settings.storecustRepoUrl||'')}" ${locked?'disabled':''}>
+    </div>
+    ${locked?'':`<button class="btn btn-primary" id="saveRepoUrls">Save Repository Links</button>`}
+  </div>`;
+}
+function settingsGeneral(){
+  const locked = !can('setup','modify');
+  if(IS_LOCAL_DEV){
+    return `
+    <div class="card" style="max-width:640px;">
+      <div class="section-title"><h3>${icon('link')} Local Dev Mode</h3><span class="badge pending">${icon('alert')} Not connected to SharePoint</span></div>
+      <p style="font-size:12.5px;color:var(--text-dim);">This page was opened via <code class="inline">file://</code>, so the SharePoint connection is skipped entirely — Azure AD doesn't allow <code class="inline">file://</code> as a sign-in redirect URI anyway. Test data here is saved to this browser's local storage only, purely so edits survive a reload while you iterate on the UI.</p>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-top:10px;">This data <b>never syncs to SharePoint</b> and the real deployed app never reads it. To test the actual SharePoint connection, serve this file over <code class="inline">http://localhost</code> (e.g. the VS Code Live Server extension) and add that exact URL as an additional redirect URI on the same Azure AD app registration.</p>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+        <button class="btn" id="exportDb">${icon('download')} Export Test Data (.json)</button>
+        <button class="btn btn-danger" id="clearLocalDevBtn">${icon('trash')} Clear Local Test Data</button>
+      </div>
+    </div>`;
+  }
+  const account = msalInstance ? msalInstance.getActiveAccount() : null;
+  return `
+  <div class="card" style="max-width:640px;">
+    <div class="section-title"><h3>${icon('link')} Official Storage Location</h3><span class="hint">Fixed — not user-editable</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:12.5px;">
+      <div><span style="color:var(--text-faint);">Site</span><br><span class="mono">${SP_HOSTNAME}${SP_SITE_PATH}</span></div>
+      <div><span style="color:var(--text-faint);">Folder</span><br><span class="mono">${escapeHtml(SP_FOLDER_PATH)}</span></div>
+      <div><span style="color:var(--text-faint);">Database file</span><br><span class="mono">${SP_FILE_NAME}</span></div>
+      <div><span style="color:var(--text-faint);">Signed in as</span><br>${account? escapeHtml(account.username) : '<span style="color:var(--text-faint);">not connected</span>'}</div>
+      <div><span style="color:var(--text-faint);">Sync status</span><br><span id="syncBadgeInline">${syncStatusLabel()}</span> ${lastSyncedAt?`<span class="hint">(last synced ${timeAgo(lastSyncedAt)})</span>`:''}</div>
+    </div>
+    <p class="hint" style="margin-top:14px;">This app has no database of its own — everything reads from and writes straight back to the SharePoint file above. Nothing is ever cached in this browser's local storage.</p>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+      <a class="btn" href="${SP_FOLDER_VIEW_URL}" target="_blank" rel="noopener">${icon('eye')} Open Folder in SharePoint</a>
+      <button class="btn" id="syncNowBtn">${icon('history')} Sync Now</button>
+      <button class="btn" id="exportDb">${icon('download')} Export Backup (.json)</button>
+      <label class="btn" style="margin:0;">${icon('upload')} Import &amp; Push to SharePoint<input type="file" id="importDbFile" accept="application/json" style="display:none;"></label>
+      <button class="btn btn-ghost" id="msSignOutBtn">Sign out of Microsoft</button>
+    </div>
+  </div>`;
+}
+function syncStatusLabel(){
+  if(IS_LOCAL_DEV){
+    const map = { idle:'🔧 Local Dev Mode', pending:'🔧 Local Dev — saving…', saving:'🔧 Local Dev — saving…', synced:'🔧 Local Dev Mode (not synced to SharePoint)', error:`🔧 Local Dev — save error: ${escapeHtml(syncError||'')}` };
+    return map[syncStatus] || '🔧 Local Dev Mode';
+  }
+  const map = { idle:'—', pending:'Change pending…', saving:'Saving to SharePoint…', synced:'Synced', error:`Error — ${escapeHtml(syncError||'')}` };
+  return map[syncStatus] || '—';
+}
+function settingsExcel(){
+  const locked = !can('setup','modify');
+  return `
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title"><h3>${icon('download')} Export to Excel</h3></div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Downloads a workbook with one sheet per record type — <code class="inline">Projects</code>, <code class="inline">Tickets</code>, <code class="inline">storecust</code>, <code class="inline">Objects</code> and <code class="inline">ObjectTypes</code> — including versions, statuses, remarks and every object allocation. Great as a backup, a report, or as a starting template for bulk edits.</p>
+      <button class="btn btn-primary" id="exportExcelBtn">${icon('download')} Export Workbook (.xlsx)</button>
+    </div>
+    <div class="card">
+      <div class="section-title"><h3>${icon('upload')} Bulk Import from Excel</h3></div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Upload a workbook using the same sheet layout as the export above to bulk-create or update Projects, Tickets, Store Customization and their Objects in one go. Existing records are matched by their code (Project No. / Year-Month-Ticket No. / Year-Month-Change No.) and updated; new codes are inserted.</p>
+      <label class="btn ${locked?'':'btn-primary'}" style="margin:0;">${icon('upload')} Import Workbook (.xlsx)<input type="file" id="importExcelFile" accept=".xlsx,.xls" style="display:none;" ${locked?'disabled':''}></label>
+      ${locked?`<div class="hint" style="margin-top:8px;">You don't have setup permission to bulk import.</div>`:''}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="section-title"><h3>Expected Sheet Layout</h3><span class="hint">Column headers are case-sensitive</span></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sheet</th><th>Columns</th></tr></thead>
+      <tbody>
+        <tr><td><b>Projects</b></td><td class="mono" style="font-size:11.5px;">ProjectNo, Name, Major, Minor, Revision, Status, Remarks, RepositoryURL</td></tr>
+        <tr><td><b>Tickets</b></td><td class="mono" style="font-size:11.5px;">Year, Month, TicketNo, Revision, Name, Status, Remarks</td></tr>
+        <tr><td><b>storecust</b></td><td class="mono" style="font-size:11.5px;">Year, Month, ChangeNo, Revision, Name, Status, Remarks</td></tr>
+        <tr><td><b>Objects</b></td><td class="mono" style="font-size:11.5px;">OwnerKind, OwnerCode, OwnerName, ObjectTypeCode, ObjectID, Description</td></tr>
+        <tr><td><b>ObjectTypes</b></td><td class="mono" style="font-size:11.5px;">Name, Code, RangeFrom, RangeTo</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="hint" style="margin-top:10px;">OwnerKind is one of <code class="inline">project</code> / <code class="inline">ticket</code> / <code class="inline">storecust</code>. OwnerCode matches the Code column shown in each list, e.g. <code class="inline">PRJ-3</code>, <code class="inline">TCK-2607-01-02</code>, <code class="inline">STC-2607-01-00</code> — export first to see the exact format. The ticket/storecust code embeds the revision number, so it changes whenever the revision changes; if OwnerCode is out of date, the importer now falls back to matching on <code class="inline">OwnerName</code> (the ticket/storecust Name) instead of failing silently — keep that column filled in as a safety net. Status must be one of Active / Drafting / Pending / Obsolete.</p>
+  </div>`;
+}
+function settingsAppearance(){
+  return `
+  <div class="card" style="max-width:500px;">
+    <div class="section-title"><h3>Theme</h3></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+      <div><div style="font-size:13px;font-weight:600;">Dark / Light Mode</div><div class="hint" style="color:var(--text-faint);">Currently: ${cap(DB.settings.theme)}</div></div>
+      <div class="toggle ${DB.settings.theme==='dark'?'on':''}" id="themeToggle2"></div>
+    </div>
+  </div>`;
+}
+function settingsObjectTypes(){
+  const locked = !can('setup','modify');
+  return `
+  <div class="card">
+    <div class="section-title"><h3>Object Type List</h3><span class="hint">Used across Projects, Tickets and Store Customization</span></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Code (prefix)</th><th></th></tr></thead>
+      <tbody id="objTypeRows">
+      ${DB.settings.objectTypes.map(t=>`
+        <tr data-tid="${t.id}">
+          <td><input type="text" class="ot-name" value="${t.name}" ${locked?'disabled':''}></td>
+          <td style="max-width:120px;"><input type="text" class="ot-code mono" value="${t.code}" ${locked?'disabled':''}></td>
+          <td style="text-align:right;">${locked?'':`<button class="btn btn-icon btn-sm btn-ghost" data-rmtype="${t.id}">${icon('trash')}</button>`}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${locked?'':`<button class="obj-add-btn" id="addObjType" style="margin-top:12px;">${icon('plus')} Add object type</button>
+    <div style="margin-top:14px;"><button class="btn btn-primary" id="saveObjTypes">Save Object Types</button></div>`}
+  </div>`;
+}
+function settingsRanges(){
+  const locked = !can('setup','modify');
+  return `
+  <div class="card">
+    <div class="section-title"><h3>Object ID Range per Type</h3><span class="hint">New objects auto-fill the next free ID inside this range</span></div>
+    <div class="table-wrap range-table-wrap">
+    <table>
+      <thead><tr><th>Object Type</th><th>From</th><th>To</th><th>Capacity</th><th>Last No. Used</th></tr></thead>
+      <tbody>
+      ${DB.settings.objectTypes.map(t=>{
+        const r = rangeFor(t.id)||{from:'',to:''};
+        return `<tr data-rtid="${t.id}">
+          <td>${t.name} <code class="inline">${t.code}</code></td>
+          <td><input type="number" class="rg-from mini-input" value="${r.from}" ${locked?'disabled':''}></td>
+          <td><input type="number" class="rg-to mini-input" value="${r.to}" ${locked?'disabled':''}></td>
+          <td class="mono">${(r.to-r.from+1)||0}</td>
+          <td><input type="number" class="rg-last mini-input" value="${r.last!=null?r.last:''}" placeholder="none" ${locked?'disabled':''}> <span class="hint" style="display:block;">next: ${r.last!=null?Math.min(r.last+1,r.to):r.from}</span></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+    ${locked?'':`<div style="margin-top:14px;"><button class="btn btn-primary" id="saveRanges">Save Ranges</button></div>`}
+  </div>`;
+}
+function settingsPasswordPolicy(){
+  const locked = !can('setup','modify');
+  const p = passwordPolicy();
+  return `
+  <div class="card" style="max-width:560px;">
+    <div class="section-title"><h3>Password Requirements</h3><span class="hint">Applied when any user sets or changes a password</span></div>
+    <div class="form-row">
+      <label>Minimum length</label>
+      <input type="number" id="ppMinLength" min="4" max="64" value="${p.minLength}" style="max-width:120px;" ${locked?'disabled':''}>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12.5px;color:var(--text-dim);">Require an uppercase letter</span>
+        <div class="toggle ${p.requireUppercase?'on':''}" data-pp="requireUppercase" style="${locked?'pointer-events:none;opacity:.5;':''}"></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12.5px;color:var(--text-dim);">Require a number</span>
+        <div class="toggle ${p.requireNumber?'on':''}" data-pp="requireNumber" style="${locked?'pointer-events:none;opacity:.5;':''}"></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12.5px;color:var(--text-dim);">Require a symbol</span>
+        <div class="toggle ${p.requireSymbol?'on':''}" data-pp="requireSymbol" style="${locked?'pointer-events:none;opacity:.5;':''}"></div>
+      </div>
+    </div>
+    ${locked?'':`<button class="btn btn-primary" id="savePasswordPolicy">Save Policy</button>`}
+    <p class="hint" style="margin-top:14px;">This is a static, client-side app — password hashes live inside the shared SharePoint database file, visible to anyone with access to that folder, with no server to verify against. Treat this as a workflow simulation of password policy and first-login resets, not production-grade authentication — encourage genuinely strong passwords given the file's visibility.</p>
+  </div>`;
+}
+
+/* ---------------------------- LOGS VIEW ---------------------------- */
+function viewLogs(){
+  let items = DB.logs;
+  if(state.search){
+    const q = state.search.toLowerCase();
+    items = items.filter(l=> (l.entityName||'').toLowerCase().includes(q) || l.action.toLowerCase().includes(q) || l.user.toLowerCase().includes(q));
+  }
+  const actionColor = a => a.includes('Delete')?'var(--danger)':a.includes('Create')?'var(--success)':a.includes('Update')||a.includes('Edit')?'var(--info)':'var(--accent2)';
+  return `
+  <div class="filter-bar">
+    <div class="search-input">${icon('search')}<input type="text" id="searchInput" placeholder="Search logs..." value="${state.search}"></div>
+    <span class="hint" style="color:var(--text-faint);font-size:12px;">${items.length} entries</span>
+  </div>
+  <div class="card" style="padding:10px 16px;">
+    ${items.length? items.map(l=>`
+      <div class="log-row" style="display:flex;gap:12px;align-items:flex-start;padding:12px 4px;border-bottom:1px solid var(--border);">
+        <div class="log-icon" style="background:${actionColor(l.action)}22;color:${actionColor(l.action)};">${icon('history')}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;"><b>${l.user}</b> ${l.action.toLowerCase()} <b>${l.entityName||l.entity}</b></div>
+          ${l.details? `<div style="font-size:11.5px;color:var(--text-faint);margin-top:2px;">${l.details}</div>`:''}
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);white-space:nowrap;">${timeAgo(l.timestamp)}</div>
+      </div>`).join('') : `<div class="empty-state">${icon('logs')}<h4>No activity yet</h4><p>Actions taken in this workspace will be recorded here.</p></div>`}
+  </div>`;
+}
+
+/* ---------------------------- CI/CD VIEW ---------------------------- */
+function ghToken(){ return sessionStorage.getItem('bcovc_gh_token') || ''; }
+function setGhToken(t){ if(t) sessionStorage.setItem('bcovc_gh_token', t); else sessionStorage.removeItem('bcovc_gh_token'); }
+function viewCicd(){
+  const manifestPreview = JSON.stringify(buildManifest(), null, 2).slice(0,900);
+  const gh = DB.settings.github || {owner:'',repo:'',branch:'main',manifestPath:'bc-object-manifest.json'};
+  const token = ghToken();
+  const canEdit = can('setup','modify');
+  const repoUrl = gh.owner && gh.repo ? `https://github.com/${gh.owner}/${gh.repo}` : '';
+  return `
+  <div class="card" style="margin-bottom:18px;">
+    <div class="section-title"><h3>${icon('cicd')} Connect a GitHub Repository</h3><span class="hint">Push directly to your repo via the GitHub Contents API</span></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Owner / Organization</label><input type="text" id="ghOwner" placeholder="e.g. my-company" value="${escapeAttr(gh.owner)}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>Repository</label><input type="text" id="ghRepo" placeholder="e.g. bc-object-version-control" value="${escapeAttr(gh.repo)}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>Branch</label><input type="text" id="ghBranch" placeholder="main" value="${escapeAttr(gh.branch||'main')}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>Manifest path in repo</label><input type="text" id="ghManifestPath" placeholder="bc-object-manifest.json" value="${escapeAttr(gh.manifestPath||'bc-object-manifest.json')}" ${canEdit?'':'disabled'}></div>
+    </div>
+    <div class="form-row">
+      <label>Personal Access Token <span class="hint">(fine-grained, Contents: Read &amp; write, scoped to this repo only)</span></label>
+      <input type="password" id="ghToken" placeholder="github_pat_..." value="${escapeAttr(token)}" ${canEdit?'':'disabled'}>
+      <span class="hint">Kept in this browser tab's session storage only — cleared when the tab closes, and never written to the shared SharePoint database file. Re-enter it each session; use a token scoped to just this one repo.</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+      ${canEdit?`<button class="btn" id="saveGithubSettings">Save Connection</button>`:''}
+      <button class="btn btn-primary" id="pushManifestGh" ${gh.owner&&gh.repo&&token?'':'disabled'}>${icon('upload')} Push Manifest to GitHub</button>
+      <button class="btn btn-primary" id="pushWorkflowGh" ${gh.owner&&gh.repo&&token?'':'disabled'}>${icon('upload')} Push Workflow File to GitHub</button>
+      ${repoUrl?`<a class="btn btn-ghost" href="${repoUrl}/actions" target="_blank" rel="noopener">${icon('eye')} View Actions on GitHub</a>`:''}
+    </div>
+    <div id="ghStatus" style="margin-top:10px;font-size:12px;color:var(--text-faint);"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title"><h3>Pipeline Webhook</h3><span class="hint">Optional — notify a non-GitHub CI/CD on manifest export</span></div>
+      <div class="form-row">
+        <label>Webhook URL</label>
+        <input type="url" id="webhookUrl" placeholder="https://ci.yourcompany.com/hooks/bc-object-manifest" value="${DB.settings.webhookUrl||''}" ${canEdit?'':'disabled'}>
+        <span class="hint">Stored with your settings, referenced by the sample workflow below as a repo secret — not called from the browser.</span>
+      </div>
+      ${canEdit?`<button class="btn" id="saveWebhook">Save Webhook URL</button>`:''}
+    </div>
+    <div class="card">
+      <div class="section-title"><h3>Export Manifest</h3><span class="hint">Snapshot of every object ID + version, for pipeline validation</span></div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Downloads a JSON file listing every allocated object ID, its type, owning record and current version — the same content the "Push Manifest to GitHub" button above commits straight into your repo.</p>
+      <button class="btn" id="exportManifest">${icon('download')} Export Manifest (.json)</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="section-title"><h3>Manifest Preview</h3></div>
+    <pre class="codeblock">${escapeHtml(manifestPreview)}${manifestPreview.length>=900?'\n  ...':''}</pre>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="section-title"><h3>GitHub Actions Workflow</h3><span class="hint">Validates object IDs on every pull request — pushed as-is by the button above</span></div>
+    <pre class="codeblock">${escapeHtml(sampleYaml())}</pre>
+  </div>`;
+}
+function ghSettings(){ return DB.settings.github || (DB.settings.github = {owner:'',repo:'',branch:'main',manifestPath:'bc-object-manifest.json'}); }
+function ghStatus(msg, kind){
+  const el = document.getElementById('ghStatus');
+  if(el){ el.textContent = msg; el.style.color = kind==='error'?'var(--danger)':kind==='success'?'var(--success)':'var(--text-faint)'; }
+}
+function b64EncodeUtf8(str){ return btoa(unescape(encodeURIComponent(str))); }
+async function githubApi(path, options){
+  const gh = ghSettings();
+  const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}${path}`, {
+    ...options,
+    headers:{ 'Authorization':`Bearer ${ghToken()}`, 'Accept':'application/vnd.github+json', ...(options&&options.headers||{}) }
+  });
+  let body = null;
+  try{ body = await res.json(); }catch(e){}
+  if(!res.ok){ const msg = (body&&body.message) ? body.message : `GitHub API error (${res.status})`; throw new Error(msg); }
+  return body;
+}
+async function githubPutFile(filePath, contentStr, commitMessage){
+  const gh = ghSettings();
+  if(!gh.owner || !gh.repo || !ghToken()){ throw new Error('Fill in owner, repo and token first.'); }
+  let sha;
+  try{
+    const existing = await githubApi(`/contents/${encodeURIComponent(filePath).replace(/%2F/g,'/')}?ref=${encodeURIComponent(gh.branch||'main')}`, {method:'GET'});
+    sha = existing && existing.sha;
+  }catch(e){ /* file probably doesn't exist yet — that's fine, create it */ }
+  return githubApi(`/contents/${encodeURIComponent(filePath).replace(/%2F/g,'/')}`, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ message: commitMessage, content: b64EncodeUtf8(contentStr), branch: gh.branch||'main', ...(sha?{sha}:{}) })
+  });
+}
+async function pushManifestToGithub(){
+  ghStatus('Pushing manifest…');
+  try{
+    const gh = ghSettings();
+    const path = gh.manifestPath || 'bc-object-manifest.json';
+    await githubPutFile(path, JSON.stringify(buildManifest(), null, 2), `Update object manifest (${new Date().toISOString()})`);
+    log('Exported','github', path, `Pushed to ${gh.owner}/${gh.repo}@${gh.branch||'main'}`);
+    ghStatus(`Manifest pushed to ${gh.owner}/${gh.repo}/${path}`, 'success');
+    toast('Manifest pushed to GitHub.', 'success');
+  }catch(err){ ghStatus(`Failed: ${err.message}`, 'error'); toast(`GitHub push failed: ${err.message}`, 'danger'); }
+}
+async function pushWorkflowToGithub(){
+  ghStatus('Pushing workflow file…');
+  try{
+    const gh = ghSettings();
+    const path = '.github/workflows/bc-object-id-guard.yml';
+    await githubPutFile(path, sampleYaml(), `Add/update BC Object ID Guard workflow (${new Date().toISOString()})`);
+    log('Exported','github', path, `Pushed to ${gh.owner}/${gh.repo}@${gh.branch||'main'}`);
+    ghStatus(`Workflow pushed to ${gh.owner}/${gh.repo}/${path}`, 'success');
+    toast('Workflow file pushed to GitHub.', 'success');
+  }catch(err){ ghStatus(`Failed: ${err.message}`, 'error'); toast(`GitHub push failed: ${err.message}`, 'danger'); }
+}
+function buildManifest(){
+  return {
+    generatedAt: new Date().toISOString(),
+    repositories: {
+      ticket: DB.settings.ticketRepoUrl || null,
+      storecust: DB.settings.storecustRepoUrl || null,
+      projects: DB.projects.map(p=>({ code:displayCode(p), name:p.name, repoUrl:p.repoUrl||null })),
+    },
+    objectRanges: DB.settings.idRanges.map(r=>({...r, type:typeById(r.typeId)?typeById(r.typeId).code:r.typeId})),
+    allocations: allEntities().flatMap(e => (e.objects||[]).map(o=>({
+      objectType: typeById(o.objectType)?typeById(o.objectType).code:o.objectType,
+      objectId: o.objectId,
+      description: o.description||'',
+      owner: displayCode(e),
+      ownerKind: e.kind,
+      ownerName: displayName(e),
+      ownerRepo: e.kind==='project' ? (e.repoUrl||null) : (e.kind==='ticket' ? (DB.settings.ticketRepoUrl||null) : (DB.settings.storecustRepoUrl||null)),
+      version: versionOf(e),
+      status: e.status,
+    }))),
+  };
+}
+function sampleYaml(){
+  return `name: BC Object ID Guard
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-object-ids:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current manifest
+        run: curl -sL "\${{ secrets.MANIFEST_URL }}" -o manifest.json
+
+      - name: Check for object ID collisions
+        run: |
+          node scripts/validate-object-ids.js \\
+            --manifest manifest.json \\
+            --app-source ./src
+
+      - name: Notify on failure
+        if: failure()
+        run: curl -X POST "\${{ secrets.WEBHOOK_URL }}" \\
+          -H "Content-Type: application/json" \\
+          -d '{"text":"Object ID collision detected in PR #\${{ github.event.number }}"}'`;
+}
+function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* ======================================================================
+   MODALS
+   ====================================================================== */
+function openModal(html){
+  state.modal = true;
+  const wrap = document.createElement('div');
+  wrap.className='modal-overlay';
+  wrap.id='modalOverlay';
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('mousedown', e=>{ if(e.target===wrap) closeModal(); });
+}
+function closeModal(){
+  const el = document.getElementById('modalOverlay');
+  if(el) el.remove();
+  state.modal = null;
+}
+
+/* ---------------------------- ENTITY (project/ticket/storecust) FORM ---------------------------- */
+let draftObjects = []; // working list of objects while modal open
+let editingEntity = null; // {kind,id} or null when creating
+let entityReadOnly = false; // true when the current modal is view-only (no save, fields disabled)
+
+function openEntityModal(kind, entityId){
+  editingEntity = entityId ? {kind, id:entityId} : null;
+  const existing = entityId ? listOf(kind).find(e=>e.id===entityId) : null;
+  draftObjects = existing ? existing.objects.map(o=>({...o})) : [];
+
+  const nameLabel = kind==='project'?'Project Name':kind==='ticket'?'Ticket No.':'Update Name';
+  const kindLabel = kind==='project'?'Project':kind==='ticket'?'Ticket':'storecust Extension';
+  const permCat = kind==='project'?'projects':kind==='ticket'?'tickets':'storecust';
+  // View-only users (or anyone lacking create rights for a brand-new record) get a
+  // read-only version of this form — no Save button, all fields disabled — so they
+  // can't edit and save over changes they're not permitted to make.
+  const readOnly = existing ? !can(permCat,'modify') : !can(permCat,'create');
+  entityReadOnly = readOnly;
+  const dis = readOnly ? 'disabled' : '';
+
+  // Identity numbers stay system-assigned (avoid collisions / broken monthly-reset scheme).
+  // Version segments themselves (major/minor/revision, or revision alone) are fully editable, min 0.
+  let identity, verMajor=1, verMinor=0, verRevision=0;
+  if(kind==='project'){
+    identity = existing ? existing.projectNo : nextProjectNo();
+    verMajor = existing ? existing.major : 1;
+    verMinor = existing ? existing.minor : 0;
+    verRevision = existing ? existing.revision : 0;
+  } else {
+    const {yy,mm} = yymm();
+    const y = existing ? existing.year : yy, m = existing ? existing.month : mm;
+    const num = existing ? (kind==='ticket'?existing.ticketNo:existing.changeNo) : (kind==='ticket'?nextTicketNo(yy,mm):nextChangeNo(yy,mm));
+    identity = {y, m, num};
+    verRevision = existing ? existing.revision : 0;
+  }
+
+  openModal(`
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>${readOnly?'View':existing?'Edit':'New'} ${kindLabel}${readOnly?' <span class="hint" style="font-weight:400;">(view only)</span>':''}</h3>
+        <button class="close-x" id="modalClose">${icon('close')}</button>
+      </div>
+      <div class="split-body">
+        <div class="split-pane pane-left">
+        <div class="form-row">
+          <label>Record Type</label>
+          <div class="readonly-field">${kindLabel} <span class="hint">(fixed for this form — open the matching "New" button to create a different type)</span></div>
+        </div>
+        <div class="form-row">
+          <label>${nameLabel}</label>
+          <input type="text" id="entName" ${dis} value="${existing?escapeAttr(existing.name):''}" placeholder="${kind==='project'?'e.g. Warehouse Automation':kind==='ticket'?'e.g. Fix posting error on sales invoice':'e.g. July hotfix bundle'}">
+        </div>
+
+        ${kind==='project' ? `
+        <div class="form-row">
+          <label>Repository URL <span class="hint">(this project's own GitHub repo)</span></label>
+          <input type="url" id="entRepoUrl" ${dis} value="${existing?escapeAttr(existing.repoUrl||''):''}" placeholder="https://github.com/org/repo-name">
+        </div>` : `
+        <div class="form-row">
+          <label>Repository <span class="hint">(one shared repo for all ${kind==='ticket'?'tickets':'Store Customization'} — set in Settings → Repositories)</span></label>
+          <div class="readonly-field">${(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl) ? `<a href="${escapeAttr(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl)}" target="_blank" rel="noopener">${escapeHtml(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl)}</a>` : `<span class="hint">Not set yet</span>`}</div>
+        </div>`}
+
+        <div class="section-title" style="margin-top:4px;">
+          <h3 style="font-size:13.5px;">Version</h3>
+          <span class="hint">${readOnly?'Read-only':'Editable — identity numbers are system-assigned, version segments are yours to set'}</span>
+        </div>
+        ${kind==='project' ? `
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <div class="form-row"><label>Project No. (a)</label><div class="readonly-field mono" style="text-align:center;">${identity}</div></div>
+          <div class="form-row"><label>Major (b)</label><input type="number" id="verMajor" ${dis} min="0" value="${verMajor}"></div>
+          <div class="form-row"><label>Minor (c)</label><input type="number" id="verMinor" ${dis} min="0" value="${verMinor}"></div>
+          <div class="form-row"><label>Revision (d)</label><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
+        </div>` : `
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+          <div class="form-row"><label>Year (${kind==='ticket'?'j':'w'})</label><div class="readonly-field mono" style="text-align:center;">${identity.y}</div></div>
+          <div class="form-row"><label>Month (${kind==='ticket'?'k':'x'})</label><div class="readonly-field mono" style="text-align:center;">${identity.m}</div></div>
+          <div class="form-row"><label>${kind==='ticket'?'Ticket No. (l)':'Change No. (y)'}</label><div class="readonly-field mono" style="text-align:center;">${pad2(identity.num)}</div></div>
+          <div class="form-row"><label>Revision (${kind==='ticket'?'m':'z'})</label><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
+        </div>`}
+        <div class="form-row" style="margin-top:-4px;">
+          <label>Version preview</label>
+          <div class="readonly-field" id="versionPreview" style="display:flex;">${vchip(kind==='project'?`${identity}.${verMajor}.${verMinor}.${verRevision}`:`${identity.y}.${identity.m}.${identity.num}.${verRevision}`)}</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label>Status</label>
+            <select id="entStatus" ${dis}>
+              ${['active','drafting','pending','obsolete'].map(s=>`<option value="${s}" ${existing&&existing.status===s?'selected':''}>${cap(s)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Remarks</label>
+            <input type="text" id="entRemarksInline" ${dis} placeholder="Optional short note" value="${existing?escapeAttr(existing.remarks||''):''}">
+          </div>
+        </div>
+
+        ${existing && existing.history && existing.history.length ? `
+        <div class="section-title" style="margin-top:20px;">
+          <h3 style="font-size:13.5px;">${icon('history')} Version History</h3>
+        </div>
+        <div style="max-height:150px;overflow-y:auto;">
+        ${existing.history.map(h=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            ${vchip(h.version,'sm')}
+            <span class="badge ${h.status}" style="margin-left:2px;">${cap(h.status)}</span>
+            <span style="flex:1;color:var(--text-faint);">${h.note}</span>
+            <span style="color:var(--text-faint);">${timeAgo(h.date)}</span>
+          </div>`).join('')}
+        </div>` : ''}
+        </div>
+        <div class="split-pane pane-right">
+          <div class="split-pane-head section-title" style="margin-bottom:0;">
+            <h3 style="font-size:13.5px;">Objects <span class="hint" style="font-weight:400;">(${(existing&&existing.objects?existing.objects.length:0)})</span></h3>
+            <span class="hint">${readOnly?'':'Select a type — the Object ID auto-fills from the next free ID in its range'}</span>
+          </div>
+          <div id="objRowsWrap"></div>
+          ${readOnly?'':`<button class="obj-add-btn" id="addObjRow">${icon('plus')} Add object</button>`}
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="modalCancel">${readOnly?'Close':'Cancel'}</button>
+        ${readOnly?'':`<button class="btn btn-primary" id="modalSave">${existing?'Save Changes':'Create '+kindLabel}</button>`}
+      </div>
+    </div>
+  `);
+  renderObjRows();
+  document.getElementById('modalClose').onclick = closeModal;
+  document.getElementById('modalCancel').onclick = closeModal;
+  if(!readOnly){
+    document.getElementById('addObjRow').onclick = ()=>{ addDraftObject(); };
+    document.getElementById('modalSave').onclick = ()=> saveEntity(kind, existing);
+  }
+
+  function refreshVersionPreview(){
+    const rev = parseInt(document.getElementById('verRevision').value, 10) || 0;
+    let str;
+    if(kind==='project'){
+      const maj = parseInt(document.getElementById('verMajor').value, 10) || 0;
+      const min = parseInt(document.getElementById('verMinor').value, 10) || 0;
+      str = `${identity}.${maj}.${min}.${rev}`;
+    } else {
+      str = `${identity.y}.${identity.m}.${pad2(identity.num)}.${rev}`;
+    }
+    document.getElementById('versionPreview').innerHTML = vchip(str);
+  }
+  if(kind==='project'){
+    document.getElementById('verMajor').addEventListener('input', refreshVersionPreview);
+    document.getElementById('verMinor').addEventListener('input', refreshVersionPreview);
+  }
+  document.getElementById('verRevision').addEventListener('input', refreshVersionPreview);
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+function addDraftObject(){
+  const firstType = DB.settings.objectTypes[0];
+  if(!firstType){ toast('Define an object type in Settings first.', 'warning'); return; }
+  const nextId = nextAvailableId(firstType.id, editingEntity?editingEntity.id:null);
+  if(nextId!=null) markRangeUsed(firstType.id, nextId);
+  draftObjects.push({id:uid(), objectType:firstType.id, objectId:nextId, description:''});
+  renderObjRows();
+}
+// The 'last used' pointer per type is what makes IDs adjustable from Settings — it's a hint
+// for where to resume handing out numbers, not a hard source of truth (nextAvailableId still
+// double-checks against everything actually in use before returning an ID).
+function markRangeUsed(typeId, id){
+  const range = rangeFor(typeId);
+  if(!range || id==null) return;
+  if(range.last==null || id>range.last) range.last = id;
+}
+function renderObjRows(){
+  const wrap = document.getElementById('objRowsWrap');
+  if(!wrap) return;
+  const dis = entityReadOnly ? 'disabled' : '';
+  // Flag any (type, id) pair that appears more than once in this entity's own object list —
+  // this is the exact condition that produced two rows both reading e.g. COD99001.
+  const seen = {};
+  draftObjects.forEach(o=>{ if(o.objectId!=null){ const k=o.objectType+'#'+o.objectId; seen[k]=(seen[k]||0)+1; } });
+  wrap.innerHTML = draftObjects.length ? `
+    <table class="obj-table">
+      <thead><tr><th>Type</th><th>Object ID</th><th>Description</th>${entityReadOnly?'':'<th></th>'}</tr></thead>
+      <tbody>
+      ${draftObjects.map(o=>{
+        const exhausted = o.objectId===null;
+        const isDup = o.objectId!=null && seen[o.objectType+'#'+o.objectId] > 1;
+        return `
+        <tr class="obj-row ${isDup?'obj-row-dup':''}" data-oid="${o.id}">
+          <td>
+            <select class="obj-type-select" ${dis}>
+              ${DB.settings.objectTypes.map(t=>`<option value="${t.id}" ${t.id===o.objectType?'selected':''}>${t.name} (${t.code})</option>`).join('')}
+            </select>
+          </td>
+          <td class="obj-id-cell">${exhausted? '<span style="color:var(--danger);">range full</span>' : (typeById(o.objectType)?typeById(o.objectType).code:'')+o.objectId}${isDup?` <span style="color:var(--danger);font-weight:700;" title="Duplicate ID — already used elsewhere in this record">${icon('alert')} duplicate</span>`:''}</td>
+          <td><input type="text" class="obj-desc-input" ${dis} placeholder="Description (optional)" value="${escapeAttr(o.description||'')}"></td>
+          ${entityReadOnly?'':`<td class="obj-actions"><button class="btn btn-icon btn-sm btn-ghost obj-remove-btn">${icon('trash')}</button></td>`}
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>` : `<div class="hint" style="padding:10px 2px;">No objects added yet.</div>`;
+
+  if(entityReadOnly) return;
+  wrap.querySelectorAll('.obj-type-select').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const row = e.target.closest('.obj-row'); const oid = row.dataset.oid;
+      const draft = draftObjects.find(d=>d.id===oid);
+      draft.objectType = e.target.value;
+      draft.objectId = nextAvailableId(draft.objectType, editingEntity?editingEntity.id:null, draft.id);
+      if(draft.objectId!=null) markRangeUsed(draft.objectType, draft.objectId);
+      renderObjRows();
+    });
+  });
+  wrap.querySelectorAll('.obj-desc-input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const row = e.target.closest('.obj-row'); const oid = row.dataset.oid;
+      draftObjects.find(d=>d.id===oid).description = e.target.value;
+    });
+  });
+  wrap.querySelectorAll('.obj-remove-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const row = e.target.closest('.obj-row'); const oid = row.dataset.oid;
+      draftObjects = draftObjects.filter(d=>d.id!==oid);
+      renderObjRows();
+    });
+  });
+}
+
+function saveEntity(kind, existing){
+  const name = document.getElementById('entName').value.trim();
+  if(!name){ toast('Please enter a name.', 'warning'); return; }
+  if(draftObjects.some(o=>o.objectId===null)){ toast('One or more objects have no free ID left in their range. Remove them or widen the range in Settings.', 'danger'); return; }
+  const dupCheck = {};
+  const dupNames = [];
+  draftObjects.forEach(o=>{
+    if(o.objectId==null) return;
+    const k = o.objectType+'#'+o.objectId;
+    dupCheck[k] = (dupCheck[k]||0)+1;
+    if(dupCheck[k]===2){ const t=typeById(o.objectType); dupNames.push(`${t?t.code:'?'}${o.objectId}`); }
+  });
+  if(dupNames.length){ toast(`Can't save — duplicate object ID(s): ${dupNames.join(', ')}. Each object must have a unique ID within this record.`, 'danger'); return; }
+  const status = document.getElementById('entStatus').value;
+  const remarks = document.getElementById('entRemarksInline').value.trim();
+
+  const revision = Math.max(0, parseInt(document.getElementById('verRevision').value, 10) || 0);
+  let major = 0, minor = 0;
+  if(kind==='project'){
+    major = Math.max(0, parseInt(document.getElementById('verMajor').value, 10) || 0);
+    minor = Math.max(0, parseInt(document.getElementById('verMinor').value, 10) || 0);
+  }
+  const repoUrl = kind==='project' ? document.getElementById('entRepoUrl').value.trim() : '';
+
+  if(existing){
+    existing.name = name; existing.status = status; existing.remarks = remarks;
+    existing.objects = draftObjects.map(o=>({id:o.id, objectType:o.objectType, objectId:o.objectId, description:o.description}));
+    if(kind==='project'){ existing.major = major; existing.minor = minor; existing.revision = revision; existing.repoUrl = repoUrl; }
+    else { existing.revision = revision; }
+    existing.updatedAt = new Date().toISOString();
+    pushHistory(existing, 'Updated');
+    log('Updated', kind, name, `Version now ${versionOf(existing)}`);
+    toast(`${cap(kind)} updated — now v${versionOf(existing)}`, 'success');
+  } else {
+    let entity;
+    const now = new Date().toISOString();
+    if(kind==='project'){
+      entity = {id:uid(), kind:'project', projectNo:nextProjectNo(), major, minor, revision, name, status, remarks, repoUrl, objects:[], createdAt:now, updatedAt:now, history:[]};
+    } else if(kind==='ticket'){
+      const {yy,mm}=yymm();
+      entity = {id:uid(), kind:'ticket', year:yy, month:mm, ticketNo:nextTicketNo(yy,mm), revision, name, status, remarks, objects:[], createdAt:now, updatedAt:now, history:[]};
+    } else {
+      const {yy,mm}=yymm();
+      entity = {id:uid(), kind:'storecust', year:yy, month:mm, changeNo:nextChangeNo(yy,mm), revision, name, status, remarks, objects:[], createdAt:now, updatedAt:now, history:[]};
+    }
+    entity.objects = draftObjects.map(o=>({id:o.id, objectType:o.objectType, objectId:o.objectId, description:o.description}));
+    pushHistory(entity, 'Created');
+    listOf(kind).push(entity);
+    log('Created', kind, name, `Version ${versionOf(entity)}`);
+    toast(`${cap(kind)} "${name}" created — v${versionOf(entity)}`, 'success');
+  }
+  saveDB();
+  closeModal();
+  render();
+}
+
+function deleteEntity(kind, id){
+  const item = listOf(kind).find(e=>e.id===id);
+  if(!item) return;
+  confirmModal(`Delete this ${kind}?`, `"${displayName(item)}" (${displayCode(item)}) and its object allocations will be permanently removed.`, ()=>{
+    if(kind==='project') DB.projects = DB.projects.filter(e=>e.id!==id);
+    if(kind==='ticket') DB.tickets = DB.tickets.filter(e=>e.id!==id);
+    if(kind==='storecust') DB.storecust = DB.storecust.filter(e=>e.id!==id);
+    log('Deleted', kind, displayName(item));
+    saveDB(); toast(`${cap(kind)} deleted.`, 'danger'); render();
+  });
+}
+
+function confirmModal(title, body, onConfirm){
+  openModal(`
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-head"><h3>${title}</h3><button class="close-x" id="modalClose">${icon('close')}</button></div>
+      <div class="modal-body"><p style="font-size:13px;color:var(--text-dim);">${body}</p></div>
+      <div class="modal-foot"><button class="btn" id="modalCancel">Cancel</button><button class="btn btn-danger" id="modalConfirm">Confirm</button></div>
+    </div>`);
+  document.getElementById('modalClose').onclick = closeModal;
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalConfirm').onclick = ()=>{ closeModal(); onConfirm(); };
+}
+
+/* ---------------------------- USER FORM ---------------------------- */
+function openUserModal(userId){
+  const existing = userId ? DB.users.find(u=>u.id===userId) : null;
+  const p = existing ? existing.permissions : perm({
+    projects:{view:true,create:true,modify:false,delete:false},
+    tickets:{view:true,create:true,modify:false,delete:false},
+    storecust:{view:true,create:true,modify:false,delete:false},
+    objects:{view:true,create:true,modify:false,delete:false},
+    setup:none(),
+  });
+  const cats = [['projects','Projects'],['tickets','Tickets'],['storecust','Store Customization'],['objects','Objects'],['setup','Setup / Settings']];
+  const policy = passwordPolicy();
+
+  openModal(`
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-head"><h3>${existing?'Edit User':'Add User'}</h3><button class="close-x" id="modalClose">${icon('close')}</button></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-row"><label>Full Name</label><input type="text" id="uName" value="${existing?escapeAttr(existing.name):''}"></div>
+          <div class="form-row"><label>Email</label><input type="email" id="uEmail" value="${existing?escapeAttr(existing.email):''}"></div>
+        </div>
+        <div class="form-row"><label>Role Label</label><input type="text" id="uRole" value="${existing?escapeAttr(existing.role):'Developer'}" placeholder="e.g. Developer, QA, Lead"></div>
+
+        <div class="section-title" style="margin-top:16px;"><h3 style="font-size:13.5px;">Password</h3><span class="hint">Min ${policy.minLength} chars${policy.requireUppercase?', 1 uppercase':''}${policy.requireNumber?', 1 number':''}${policy.requireSymbol?', 1 symbol':''}</span></div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label>${existing?'Set New Password':'Temporary Password'} <span class="hint">${existing?'(leave blank to keep current)':'(leave blank to auto-generate)'}</span></label>
+            <input type="password" id="uPassword" autocomplete="new-password">
+          </div>
+          <div class="form-row">
+            <label>Confirm Password</label>
+            <input type="password" id="uPasswordConfirm" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin:-6px 0 10px;">
+          <div class="toggle ${(!existing || existing.mustChangePassword)?'on':''}" id="uMustChange"></div>
+          <span>Require password change at ${existing?'next':'first'} login</span>
+        </div>
+        <div id="uPasswordError" style="font-size:12px;color:var(--danger);margin:-4px 0 10px;"></div>
+
+        <div class="section-title" style="margin-top:6px;"><h3 style="font-size:13.5px;">Permissions</h3><span class="hint">Toggle what this user can View / Create / Modify / Delete — turn a category's View off for a view-only-restricted, or fully hidden, section</span></div>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Category</th><th style="text-align:center;">View</th><th style="text-align:center;">Create</th><th style="text-align:center;">Modify</th><th style="text-align:center;">Delete</th></tr></thead>
+          <tbody>
+          ${cats.map(([cid,label])=>`
+            <tr>
+              <td>${label}</td>
+              ${['view','create','modify','delete'].map(a=>`<td style="text-align:center;"><div class="toggle ${p[cid][a]?'on':''}" data-perm="${cid}:${a}" style="margin:0 auto;"></div></td>`).join('')}
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="modalCancel">Cancel</button>
+        <button class="btn btn-primary" id="modalSaveUser">${existing?'Save Changes':'Add User'}</button>
+      </div>
+    </div>`);
+
+  const workingPerm = JSON.parse(JSON.stringify(p));
+  document.querySelectorAll('[data-perm]').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      const [cid,a] = t.dataset.perm.split(':');
+      workingPerm[cid][a] = !workingPerm[cid][a];
+      t.classList.toggle('on', workingPerm[cid][a]);
+      if(a==='view' && !workingPerm[cid].view){
+        // Can't create/modify/delete what you can't view.
+        ['create','modify','delete'].forEach(other=>{
+          workingPerm[cid][other] = false;
+          const el = document.querySelector(`[data-perm="${cid}:${other}"]`);
+          if(el) el.classList.remove('on');
+        });
+      } else if(a!=='view' && workingPerm[cid][a] && !workingPerm[cid].view){
+        workingPerm[cid].view = true;
+        const el = document.querySelector(`[data-perm="${cid}:view"]`);
+        if(el) el.classList.add('on');
+      }
+    });
+  });
+  let workingMustChange = !existing || existing.mustChangePassword;
+  document.getElementById('uMustChange').addEventListener('click', function(){
+    workingMustChange = !workingMustChange;
+    this.classList.toggle('on', workingMustChange);
+  });
+  document.getElementById('modalClose').onclick = closeModal;
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSaveUser').onclick = async ()=>{
+    const errEl = document.getElementById('uPasswordError');
+    errEl.textContent = '';
+    const name = document.getElementById('uName').value.trim();
+    const email = document.getElementById('uEmail').value.trim();
+    const role = document.getElementById('uRole').value.trim() || 'Developer';
+    if(!name){ toast('Please enter a name.', 'warning'); return; }
+    const pw = document.getElementById('uPassword').value;
+    const pwConfirm = document.getElementById('uPasswordConfirm').value;
+    if(pw || pwConfirm){
+      if(pw !== pwConfirm){ errEl.textContent='Passwords do not match.'; return; }
+      const {valid} = validatePassword(pw);
+      if(!valid){ errEl.textContent='Password does not meet the policy requirements.'; return; }
+    }
+
+    let generatedPw = null;
+    if(existing){
+      existing.name=name; existing.email=email; existing.role=role; existing.permissions=workingPerm;
+      existing.mustChangePassword = workingMustChange;
+      if(pw){ existing.passwordHash = await sha256Hex(pw); existing.passwordUpdatedAt = new Date().toISOString(); }
+      log('Updated', 'user', name);
+      saveDB(); closeModal(); render();
+      toast('User updated.', 'success');
+    } else {
+      let finalPw = pw;
+      if(!finalPw){ finalPw = genTempPassword(); generatedPw = finalPw; }
+      const hash = await sha256Hex(finalPw);
+      DB.users.push({id:uid(), name, email, role, permissions:workingPerm, passwordHash:hash, mustChangePassword:workingMustChange, passwordUpdatedAt:null});
+      log('Created', 'user', name);
+      saveDB(); closeModal(); render();
+      if(generatedPw){
+        openModal(`
+          <div class="modal" style="max-width:440px;">
+            <div class="modal-head"><h3>Temporary password generated</h3><button class="close-x" id="modalClose">${icon('close')}</button></div>
+            <div class="modal-body">
+              <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">Share this with <b>${escapeAttr(name)}</b> — it won't be shown again.</p>
+              <div class="readonly-field" style="text-align:center;font-size:16px;letter-spacing:.05em;">${generatedPw}</div>
+            </div>
+            <div class="modal-foot"><button class="btn btn-primary" id="modalGenOk">Done</button></div>
+          </div>`);
+        document.getElementById('modalClose').onclick = closeModal;
+        document.getElementById('modalGenOk').onclick = closeModal;
+      } else {
+        toast('User added.', 'success');
+      }
+    }
+  };
+}
+function deleteUser(userId){
+  const u = DB.users.find(x=>x.id===userId);
+  if(!u) return;
+  if(DB.users.length<=1){ toast("Can't delete the last remaining user.", 'warning'); return; }
+  confirmModal('Remove user?', `"${u.name}" will lose access to this workspace.`, ()=>{
+    DB.users = DB.users.filter(x=>x.id!==userId);
+    if(DB.currentUserId===userId) DB.currentUserId = DB.users[0].id;
+    log('Deleted', 'user', u.name);
+    saveDB(); toast('User removed.', 'danger'); render();
+  });
+}
+
+/* ======================================================================
+   GLOBAL EVENT HANDLERS (re-attached after every render)
+   ====================================================================== */
+function attachGlobalHandlers(){
+  attachChromeHandlers();
+  attachContentHandlers();
+}
+function attachChromeHandlers(){
+  document.querySelectorAll('[data-nav]').forEach(el=>{
+    el.addEventListener('click', ()=> setView(el.dataset.nav));
+  });
+  const hamburger = document.getElementById('hamburgerBtn');
+  if(hamburger) hamburger.addEventListener('click', ()=> document.getElementById('sidebar').classList.toggle('open'));
+
+  const themeToggle = document.getElementById('themeToggle');
+  if(themeToggle) themeToggle.addEventListener('click', toggleTheme);
+  const themeToggle2 = document.getElementById('themeToggle2');
+  if(themeToggle2) themeToggle2.addEventListener('click', toggleTheme);
+
+  const changePwLink = document.getElementById('changePwLink');
+  if(changePwLink) changePwLink.addEventListener('click', ()=>{ authStage='changepw'; pendingChangeForced=false; paint(); });
+  const logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.addEventListener('click', logout);
+
+  document.querySelectorAll('[data-new]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const kind = el.dataset.new;
+      if(kind==='user') openUserModal(null); else openEntityModal(kind, null);
+    });
+  });
+}
+/* Handlers scoped to the .content area — safe to re-bind on partial re-renders
+   (e.g. live search) since content.innerHTML is fully replaced each time,
+   which detaches any previously bound listeners along with the old nodes. */
+function attachContentHandlers(){
+  document.querySelectorAll('[data-edit]').forEach(el=>{
+    el.addEventListener('click', ()=>{ const [kind,id] = el.dataset.edit.split(':'); openEntityModal(kind,id); });
+  });
+  document.querySelectorAll('[data-view]').forEach(el=>{
+    el.addEventListener('click', ()=>{ const [kind,id] = el.dataset.view.split(':'); openEntityModal(kind,id); });
+  });
+  document.querySelectorAll('[data-del]').forEach(el=>{
+    el.addEventListener('click', ()=>{ const [kind,id] = el.dataset.del.split(':'); deleteEntity(kind,id); });
+  });
+  document.querySelectorAll('[data-edituser]').forEach(el=>{
+    el.addEventListener('click', ()=> openUserModal(el.dataset.edituser));
+  });
+  document.querySelectorAll('[data-deluser]').forEach(el=>{
+    el.addEventListener('click', ()=> deleteUser(el.dataset.deluser));
+  });
+
+  const searchInput = document.getElementById('searchInput');
+  if(searchInput) searchInput.addEventListener('input', e=>{ state.search = e.target.value; renderInPlace(); });
+  const statusFilter = document.getElementById('statusFilter');
+  if(statusFilter) statusFilter.addEventListener('change', e=>{ state.statusFilter = e.target.value; render(); });
+
+  document.querySelectorAll('[data-stab]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.settingsTab = el.dataset.stab; render(); });
+  });
+
+  const syncNowBtn = document.getElementById('syncNowBtn');
+  if(syncNowBtn) syncNowBtn.addEventListener('click', async ()=>{
+    syncNowBtn.disabled = true;
+    try{ await saveDbToSharePointNow(DB); syncStatus='synced'; lastSyncedAt=new Date().toISOString(); syncError=''; toast('Synced to SharePoint.', 'success'); }
+    catch(e){ syncStatus='error'; syncError=e.message; toast(`Sync failed: ${e.message}`, 'danger'); }
+    updateSyncBadge(); syncNowBtn.disabled = false; render();
+  });
+  const clearLocalDevBtn = document.getElementById('clearLocalDevBtn');
+  if(clearLocalDevBtn) clearLocalDevBtn.addEventListener('click', ()=>{
+    confirmModal('Clear local test data?', 'This wipes the local-dev-only test database in this browser and reseeds fresh demo data. It never touches SharePoint.', ()=>{
+      localStorage.removeItem(LOCAL_DEV_DB_KEY);
+      window.location.reload();
+    });
+  });
+  const msSignOutBtn = document.getElementById('msSignOutBtn');
+  if(msSignOutBtn) msSignOutBtn.addEventListener('click', async ()=>{
+    confirmModal('Sign out of Microsoft?', "You'll need to sign in again to reconnect to SharePoint.", async ()=>{
+      const account = msalInstance ? msalInstance.getActiveAccount() : null;
+      if(msalInstance && account){ try{ await msalInstance.logoutPopup({ account }); }catch(e){} }
+      window.location.reload();
+    });
+  });
+  const exportDb = document.getElementById('exportDb');
+  if(exportDb) exportDb.addEventListener('click', exportDatabase);
+  const importDbFile = document.getElementById('importDbFile');
+  if(importDbFile) importDbFile.addEventListener('change', importDatabase);
+
+  const exportExcelBtn = document.getElementById('exportExcelBtn');
+  if(exportExcelBtn) exportExcelBtn.addEventListener('click', exportExcelWorkbook);
+  const importExcelFile = document.getElementById('importExcelFile');
+  if(importExcelFile) importExcelFile.addEventListener('change', importExcelWorkbook);
+
+  const saveWebhook = document.getElementById('saveWebhook');
+  if(saveWebhook) saveWebhook.addEventListener('click', ()=>{
+    DB.settings.webhookUrl = document.getElementById('webhookUrl').value.trim();
+    saveDB(); toast('Webhook URL saved.', 'success');
+  });
+  const saveRepoUrls = document.getElementById('saveRepoUrls');
+  if(saveRepoUrls) saveRepoUrls.addEventListener('click', ()=>{
+    DB.settings.ticketRepoUrl = document.getElementById('ticketRepoUrl').value.trim();
+    DB.settings.storecustRepoUrl = document.getElementById('storecustRepoUrl').value.trim();
+    saveDB(); log('Updated','settings','Repository links'); toast('Repository links saved.', 'success'); render();
+  });
+  const exportManifest = document.getElementById('exportManifest');
+  if(exportManifest) exportManifest.addEventListener('click', ()=>{
+    downloadJson(buildManifest(), `bc-object-manifest-${Date.now()}.json`);
+    log('Exported','manifest','CI/CD manifest');
+    toast('Manifest downloaded.', 'success');
+  });
+
+  const saveGithubSettings = document.getElementById('saveGithubSettings');
+  if(saveGithubSettings) saveGithubSettings.addEventListener('click', ()=>{
+    const gh = ghSettings();
+    gh.owner = document.getElementById('ghOwner').value.trim();
+    gh.repo = document.getElementById('ghRepo').value.trim();
+    gh.branch = document.getElementById('ghBranch').value.trim() || 'main';
+    gh.manifestPath = document.getElementById('ghManifestPath').value.trim() || 'bc-object-manifest.json';
+    setGhToken(document.getElementById('ghToken').value.trim());
+    saveDB(); log('Updated','settings','GitHub connection (owner/repo/branch — token kept out of the synced file)'); toast('GitHub connection saved.', 'success'); render();
+  });
+  const pushManifestGh = document.getElementById('pushManifestGh');
+  if(pushManifestGh) pushManifestGh.addEventListener('click', pushManifestToGithub);
+  const pushWorkflowGh = document.getElementById('pushWorkflowGh');
+  if(pushWorkflowGh) pushWorkflowGh.addEventListener('click', pushWorkflowToGithub);
+
+  const addObjType = document.getElementById('addObjType');
+  if(addObjType) addObjType.addEventListener('click', ()=>{
+    const id = 'ot'+uid().slice(0,5);
+    DB.settings.objectTypes.push({id, name:'New Type', code:'NEW'});
+    DB.settings.idRanges.push({typeId:id, from:50100, to:50109});
+    saveDB(); render(); state.settingsTab='objecttypes'; render();
+  });
+  const saveObjTypes = document.getElementById('saveObjTypes');
+  if(saveObjTypes) saveObjTypes.addEventListener('click', ()=>{
+    document.querySelectorAll('#objTypeRows tr').forEach(row=>{
+      const tid = row.dataset.tid;
+      const t = typeById(tid);
+      if(t){ t.name = row.querySelector('.ot-name').value.trim()||t.name; t.code = row.querySelector('.ot-code').value.trim().toUpperCase()||t.code; }
+    });
+    saveDB(); log('Updated','settings','Object types'); toast('Object types saved.', 'success'); render();
+  });
+  document.querySelectorAll('[data-rmtype]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const tid = el.dataset.rmtype;
+      const inUse = allEntities().some(e=>(e.objects||[]).some(o=>o.objectType===tid));
+      if(inUse){ toast("Can't remove — this type is used by existing objects.", 'warning'); return; }
+      DB.settings.objectTypes = DB.settings.objectTypes.filter(t=>t.id!==tid);
+      DB.settings.idRanges = DB.settings.idRanges.filter(r=>r.typeId!==tid);
+      saveDB(); toast('Object type removed.', 'danger'); render(); state.settingsTab='objecttypes'; render();
+    });
+  });
+  const saveRanges = document.getElementById('saveRanges');
+  if(saveRanges) saveRanges.addEventListener('click', ()=>{
+    let ok = true;
+    document.querySelectorAll('[data-rtid]').forEach(row=>{
+      const tid = row.dataset.rtid;
+      const from = parseInt(row.querySelector('.rg-from').value,10);
+      const to = parseInt(row.querySelector('.rg-to').value,10);
+      const lastRaw = row.querySelector('.rg-last').value;
+      const last = lastRaw==='' ? null : parseInt(lastRaw,10);
+      if(isNaN(from)||isNaN(to)||to<from){ ok=false; return; }
+      if(last!=null && (isNaN(last) || last<from-1 || last>to)){ ok=false; return; }
+      let r = rangeFor(tid);
+      if(!r){ r = {typeId:tid, from, to, last}; DB.settings.idRanges.push(r); } else { r.from=from; r.to=to; r.last=last; }
+    });
+    if(!ok){ toast('Check that every "To" is greater than or equal to "From", and "Last No. Used" falls within that range.', 'warning'); return; }
+    saveDB(); log('Updated','settings','ID ranges'); toast('Ranges saved.', 'success'); render();
+  });
+
+  const workingPolicy = JSON.parse(JSON.stringify(passwordPolicy()));
+  document.querySelectorAll('[data-pp]').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      const key = t.dataset.pp;
+      workingPolicy[key] = !workingPolicy[key];
+      t.classList.toggle('on', workingPolicy[key]);
+    });
+  });
+  const savePasswordPolicy = document.getElementById('savePasswordPolicy');
+  if(savePasswordPolicy) savePasswordPolicy.addEventListener('click', ()=>{
+    const minLength = parseInt(document.getElementById('ppMinLength').value,10);
+    DB.settings.passwordPolicy = { minLength: isNaN(minLength)?8:Math.max(4,minLength), requireUppercase:workingPolicy.requireUppercase, requireNumber:workingPolicy.requireNumber, requireSymbol:workingPolicy.requireSymbol };
+    saveDB(); log('Updated','settings','Password policy'); toast('Password policy saved.', 'success'); render();
+  });
+}
+
+function renderInPlace(){
+  // lightweight re-render of just the content area for smooth typing in search boxes.
+  // Only rebinds content-scoped handlers (chrome/sidebar listeners stay untouched and unduplicated).
+  const content = document.querySelector('.content');
+  if(!content) return;
+  const prevInput = document.getElementById('searchInput');
+  const caret = prevInput ? prevInput.selectionStart : null;
+  content.innerHTML = renderView();
+  attachContentHandlers();
+  const nextInput = document.getElementById('searchInput');
+  if(nextInput && caret!==null){ nextInput.focus(); nextInput.setSelectionRange(caret, caret); }
+}
+
+function toggleTheme(){
+  DB.settings.theme = DB.settings.theme==='dark' ? 'light' : 'dark';
+  saveDB(); paint();
+}
+
+/* ---------------------------- MANUAL BACKUP EXPORT / IMPORT (JSON) ---------------------------- */
+function downloadJson(obj, filename){
+  const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function exportDatabase(){
+  downloadJson(DB, `bc-object-version-control-${Date.now()}.json`);
+  log('Exported','database','Full workspace database');
+  toast('Backup exported. This is a manual snapshot — the live database stays in SharePoint.', 'success');
+}
+function importDatabase(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try{
+      const parsed = JSON.parse(evt.target.result);
+      if(!parsed.settings || !parsed.users){ throw new Error('Not a recognized database file'); }
+      confirmModal('Replace current data?', 'Importing will overwrite the shared database on SharePoint with the contents of the selected file, for everyone.', ()=>{
+        DB = normalizeDB(parsed);
+        if(!DB.users.find(u=>u.id===DB.currentUserId)) DB.currentUserId = DB.users[0].id;
+        saveDB(); log('Imported','database','Restored from file'); toast('Database imported.', 'success'); render();
+      });
+    }catch(err){ toast('That file could not be read as a valid database export.', 'danger'); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------------------------- EXCEL BULK IMPORT / EXPORT ---------------------------- */
+function exportExcelWorkbook(){
+  if(typeof XLSX==='undefined'){ toast('Excel library failed to load — check your internet connection.', 'danger'); return; }
+  const wb = XLSX.utils.book_new();
+
+  const projectsSheet = DB.projects.map(p=>({
+    ProjectNo:p.projectNo, Name:p.name, Major:p.major, Minor:p.minor, Revision:p.revision,
+    Status:cap(p.status), Remarks:p.remarks||'', RepositoryURL:p.repoUrl||'', Version:versionOf(p), Code:displayCode(p),
+  }));
+  const ticketsSheet = DB.tickets.map(t=>({
+    Year:t.year, Month:t.month, TicketNo:t.ticketNo, Revision:t.revision, Name:t.name,
+    Status:cap(t.status), Remarks:t.remarks||'', Version:versionOf(t), Code:displayCode(t),
+  }));
+  const storecustSheet = DB.storecust.map(o=>({
+    Year:o.year, Month:o.month, ChangeNo:o.changeNo, Revision:o.revision, Name:o.name,
+    Status:cap(o.status), Remarks:o.remarks||'', Version:versionOf(o), Code:displayCode(o),
+  }));
+  const objectsSheet = allEntities().flatMap(e => (e.objects||[]).map(o=>({
+    OwnerKind:e.kind, OwnerCode:displayCode(e), OwnerName:displayName(e),
+    ObjectTypeCode: typeById(o.objectType)?typeById(o.objectType).code:o.objectType,
+    ObjectID:o.objectId, Description:o.description||'',
+  })));
+  const objectTypesSheet = DB.settings.objectTypes.map(t=>{
+    const r = rangeFor(t.id)||{from:'',to:''};
+    return {Name:t.name, Code:t.code, RangeFrom:r.from, RangeTo:r.to};
+  });
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projectsSheet), 'Projects');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ticketsSheet), 'Tickets');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(storecustSheet), 'storecust');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(objectsSheet), 'Objects');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(objectTypesSheet), 'ObjectTypes');
+
+  XLSX.writeFile(wb, `bc-object-version-control-${Date.now()}.xlsx`);
+  log('Exported','excel','Workbook (Projects/Tickets/storecust/Objects/ObjectTypes)');
+  toast('Workbook exported.', 'success');
+}
+
+function normStatus(s){
+  s = String(s||'active').trim().toLowerCase();
+  return ['active','drafting','pending','obsolete'].includes(s) ? s : 'active';
+}
+function findOrCreateObjectType(code){
+  code = String(code||'').trim().toUpperCase();
+  if(!code) return null;
+  let t = DB.settings.objectTypes.find(x=>x.code.toUpperCase()===code);
+  if(!t){
+    const id = 'ot'+uid().slice(0,5);
+    t = {id, name:code, code};
+    DB.settings.objectTypes.push(t);
+    DB.settings.idRanges.push({typeId:id, from:50100, to:50149});
+  }
+  return t;
+}
+
+function importExcelWorkbook(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Excel library failed to load — check your internet connection.', 'danger'); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = evt => {
+    let wb;
+    try{ wb = XLSX.read(evt.target.result, {type:'array'}); }
+    catch(err){ toast('That file could not be read as an Excel workbook.', 'danger'); e.target.value=''; return; }
+
+    const sheetJson = name => wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], {defval:''}) : [];
+    const rowsProjects = sheetJson('Projects');
+    const rowsTickets = sheetJson('Tickets');
+    const rowsstorecust = sheetJson('storecust');
+    const rowsObjects = sheetJson('Objects');
+    const rowsObjectTypes = sheetJson('ObjectTypes');
+
+    if(!rowsProjects.length && !rowsTickets.length && !rowsstorecust.length && !rowsObjects.length && !rowsObjectTypes.length){
+      toast('No recognizable sheets found (expected Projects / Tickets / storecust / Objects / ObjectTypes).', 'warning');
+      e.target.value=''; return;
+    }
+
+    confirmModal('Import this workbook?', `Found ${rowsProjects.length} project row(s), ${rowsTickets.length} ticket row(s), ${rowsstorecust.length} storecust row(s), ${rowsObjects.length} object row(s) and ${rowsObjectTypes.length} object type row(s). Existing records with a matching code will be updated in place; everything else is added as new.`, ()=>{
+      runExcelImport({rowsProjects, rowsTickets, rowsstorecust, rowsObjects, rowsObjectTypes});
+      e.target.value='';
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function runExcelImport({rowsProjects, rowsTickets, rowsstorecust, rowsObjects, rowsObjectTypes}){
+  const now = new Date().toISOString();
+  let counts = {types:0, projects:0, tickets:0, storecust:0, objects:0, skipped:0};
+
+  // 1) Object Types + Ranges first, since Objects rows reference them by code
+  rowsObjectTypes.forEach(row=>{
+    const code = String(row.Code||'').trim().toUpperCase();
+    const name = String(row.Name||code||'').trim();
+    if(!code) return;
+    let t = DB.settings.objectTypes.find(x=>x.code.toUpperCase()===code);
+    if(!t){
+      const id='ot'+uid().slice(0,5);
+      t = {id, name: name||code, code};
+      DB.settings.objectTypes.push(t);
+      DB.settings.idRanges.push({typeId:t.id, from:Number(row.RangeFrom)||50100, to:Number(row.RangeTo)||50149});
+    } else {
+      t.name = name || t.name;
+      const r = rangeFor(t.id);
+      if(r){ if(row.RangeFrom!=='') r.from = Number(row.RangeFrom); if(row.RangeTo!=='') r.to = Number(row.RangeTo); }
+    }
+    counts.types++;
+  });
+
+  // 2) Projects — matched by ProjectNo
+  rowsProjects.forEach(row=>{
+    const projectNo = Number(row.ProjectNo);
+    if(row.ProjectNo===undefined || row.ProjectNo==='' || isNaN(projectNo) || projectNo<0 || !row.Name){ counts.skipped++; return; }
+    const numOr = (val, fallback) => { const n = Number(val); return isNaN(n) ? fallback : n; };
+    let p = DB.projects.find(x=>x.projectNo===projectNo);
+    if(!p){
+      p = {id:uid(), kind:'project', projectNo, major:numOr(row.Major,1), minor:numOr(row.Minor,0), revision:numOr(row.Revision,0),
+        name:String(row.Name), status:normStatus(row.Status), remarks:String(row.Remarks||''), repoUrl:String(row.RepositoryURL||''), objects:[], createdAt:now, updatedAt:now, history:[]};
+      DB.projects.push(p);
+      pushHistory(p, 'Imported from Excel');
+    } else {
+      p.name = String(row.Name); p.major=numOr(row.Major,p.major); p.minor=numOr(row.Minor,p.minor); p.revision=numOr(row.Revision,p.revision);
+      p.status = normStatus(row.Status); p.remarks = String(row.Remarks||''); p.repoUrl = row.RepositoryURL!==undefined ? String(row.RepositoryURL||'') : (p.repoUrl||''); p.updatedAt = now;
+      pushHistory(p, 'Updated via Excel import');
+    }
+    counts.projects++;
+  });
+
+  // 3) Tickets — matched by Year+Month+TicketNo
+  rowsTickets.forEach(row=>{
+    const year = pad2(row.Year); const month = pad2(row.Month); const ticketNo = Number(row.TicketNo);
+    if(row.TicketNo===undefined || row.TicketNo==='' || isNaN(ticketNo) || ticketNo<0 || !row.Name){ counts.skipped++; return; }
+    let t = DB.tickets.find(x=>x.year===year && x.month===month && x.ticketNo===ticketNo);
+    if(!t){
+      t = {id:uid(), kind:'ticket', year, month, ticketNo, revision:Number(row.Revision)||0,
+        name:String(row.Name), status:normStatus(row.Status), remarks:String(row.Remarks||''), objects:[], createdAt:now, updatedAt:now, history:[]};
+      DB.tickets.push(t);
+      pushHistory(t, 'Imported from Excel');
+    } else {
+      t.name = String(row.Name); t.revision = (row.Revision!==undefined && row.Revision!=='' && !isNaN(Number(row.Revision))) ? Number(row.Revision) : t.revision;
+      t.status = normStatus(row.Status); t.remarks = String(row.Remarks||''); t.updatedAt = now;
+      pushHistory(t, 'Updated via Excel import');
+    }
+    counts.tickets++;
+  });
+
+  // 4) storecust — matched by Year+Month+ChangeNo
+  rowsstorecust.forEach(row=>{
+    const year = pad2(row.Year); const month = pad2(row.Month); const changeNo = Number(row.ChangeNo);
+    if(row.ChangeNo===undefined || row.ChangeNo==='' || isNaN(changeNo) || changeNo<0 || !row.Name){ counts.skipped++; return; }
+    let o = DB.storecust.find(x=>x.year===year && x.month===month && x.changeNo===changeNo);
+    if(!o){
+      o = {id:uid(), kind:'storecust', year, month, changeNo, revision:Number(row.Revision)||0,
+        name:String(row.Name), status:normStatus(row.Status), remarks:String(row.Remarks||''), objects:[], createdAt:now, updatedAt:now, history:[]};
+      DB.storecust.push(o);
+      pushHistory(o, 'Imported from Excel');
+    } else {
+      o.name = String(row.Name); o.revision = (row.Revision!==undefined && row.Revision!=='' && !isNaN(Number(row.Revision))) ? Number(row.Revision) : o.revision;
+      o.status = normStatus(row.Status); o.remarks = String(row.Remarks||''); o.updatedAt = now;
+      pushHistory(o, 'Updated via Excel import');
+    }
+    counts.storecust++;
+  });
+
+  // 5) Objects — attached to whichever owner (project/ticket/storecust) matches OwnerKind + OwnerCode.
+  // Codes can drift out of sync with a workbook exported earlier (e.g. the Code format changes,
+  // or someone hand-edits a cell), so matching falls back from an exact code match to a
+  // normalized code match to a name match before giving up.
+  function findOwnerByCode(kind, code, name){
+    const raw = String(code||'').trim().toUpperCase();
+    const list = listOf(kind);
+    let owner = raw ? list.find(e=>displayCode(e).toUpperCase()===raw) : null;
+    if(!owner && raw){
+      const norm = raw.replace(/[^A-Z0-9]/g,'');
+      if(norm) owner = list.find(e=>displayCode(e).toUpperCase().replace(/[^A-Z0-9]/g,'')===norm);
+    }
+    if(!owner && name){
+      const nm = String(name).trim().toLowerCase();
+      if(nm) owner = list.find(e=>String(displayName(e)||'').trim().toLowerCase()===nm);
+    }
+    return owner;
+  }
+  let objSkip = {badKind:0, ownerNotFound:0, badId:0, badType:0};
+  const missingOwners = [];
+  rowsObjects.forEach(row=>{
+    const kind = String(row.OwnerKind||'').trim().toLowerCase();
+    if(!['project','ticket','storecust'].includes(kind)){ counts.skipped++; objSkip.badKind++; return; }
+    const owner = findOwnerByCode(kind, row.OwnerCode, row.OwnerName);
+    const objectId = Number(row.ObjectID);
+    if(!owner){ counts.skipped++; objSkip.ownerNotFound++; missingOwners.push(String(row.OwnerCode||row.OwnerName||'?')); return; }
+    if(row.ObjectID===undefined || row.ObjectID==='' || isNaN(objectId) || objectId<0){ counts.skipped++; objSkip.badId++; return; }
+    const type = findOrCreateObjectType(row.ObjectTypeCode);
+    if(!type){ counts.skipped++; objSkip.badType++; return; }
+    owner.objects = owner.objects || [];
+    const dup = owner.objects.find(o=>o.objectType===type.id && o.objectId===objectId);
+    if(!dup){
+      owner.objects.push({id:uid(), objectType:type.id, objectId, description:String(row.Description||'')});
+      markRangeUsed(type.id, objectId);
+      counts.objects++;
+    } else {
+      dup.description = String(row.Description||dup.description||'');
+    }
+  });
+
+  saveDB();
+  log('Imported','excel', 'Workbook', `Projects:${counts.projects} Tickets:${counts.tickets} storecust:${counts.storecust} Objects:${counts.objects} Types:${counts.types} Skipped:${counts.skipped}`);
+  toast(`Imported: ${counts.projects} project(s), ${counts.tickets} ticket(s), ${counts.storecust} storecust(s), ${counts.objects} object(s)${counts.skipped?`, ${counts.skipped} row(s) skipped`:''}.`, 'success');
+  if(objSkip.ownerNotFound){
+    toast(`${objSkip.ownerNotFound} object row(s) skipped — owner not found: ${missingOwners.slice(0,5).join(', ')}${missingOwners.length>5?', …':''}. Check the OwnerCode/OwnerKind columns match an existing Project/Ticket/storecust.`, 'warning');
+  }
+  render();
+}
+
+/* ======================================================================
+   SHAREPOINT CONNECTION SCREENS
+   ====================================================================== */
+function renderConnecting(msg){
+  document.documentElement.setAttribute('data-theme', DB && DB.settings ? DB.settings.theme : 'dark');
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="auth-wrap">
+    <div class="glass auth-card" style="text-align:center;">
+      <div class="brand" style="padding:0 0 18px;justify-content:center;">
+        ${brandMarkHtml()}
+        <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+      </div>
+      <div style="width:34px;height:34px;border-radius:50%;border:3px solid var(--border-strong);border-top-color:var(--accent1);margin:0 auto 16px;animation:spin 0.9s linear infinite;"></div>
+      <p style="font-size:13px;color:var(--text-dim);">${escapeHtml(msg||'Connecting…')}</p>
+      <p style="font-size:11.5px;color:var(--text-faint);margin-top:14px;">Connecting to SharePoint — ${SP_HOSTNAME}${SP_SITE_PATH}</p>
+    </div>
+  </div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+}
+function renderSetupRequired(extraMsg){
+  document.documentElement.setAttribute('data-theme','dark');
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="auth-wrap">
+    <div class="glass auth-card" style="max-width:560px;">
+      <div class="brand" style="padding:0 0 18px;justify-content:center;">
+        ${brandMarkHtml()}
+        <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+      </div>
+      <h3 style="text-align:center;font-size:16px;margin-bottom:4px;">Microsoft sign-in not configured</h3>
+      <p style="text-align:center;font-size:12.5px;color:var(--text-faint);margin-bottom:18px;">${extraMsg?escapeHtml(extraMsg):'This app stores everything in SharePoint and needs a one-time Azure AD app registration before it can connect.'}</p>
+      <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:16px;">
+        <li>In <b>entra.microsoft.com</b> → App registrations → New registration</li>
+        <li>Redirect URI platform: <b>Single-page application (SPA)</b>, value = this app's exact URL (<code class="inline">${escapeHtml(window.location.origin + window.location.pathname)}</code>)</li>
+        <li>API permissions → Microsoft Graph → Delegated → <code class="inline">Sites.ReadWrite.All</code> → Grant admin consent</li>
+        <li>Copy the <b>Application (client) ID</b></li>
+        <li>Open this file, find <code class="inline">MSAL_CLIENT_ID</code> near the top of the <code class="inline">&lt;script&gt;</code> block, and paste it in between the quotes</li>
+      </ol>
+      <p style="font-size:11.5px;color:var(--text-faint);text-align:center;">Target folder: <span class="mono">${SP_HOSTNAME}${SP_SITE_PATH}/${escapeHtml(SP_FOLDER_PATH)}</span></p>
+    </div>
+  </div>`;
+}
+function renderConnectError(msg){
+  document.documentElement.setAttribute('data-theme','dark');
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="auth-wrap">
+    <div class="glass auth-card" style="text-align:center;">
+      <div class="brand" style="padding:0 0 18px;justify-content:center;">
+        ${brandMarkHtml()}
+        <div class="brand-text"><b>BC Object & Version Control Monitoring</b><span>Healthy Options - BS Dev Team</span></div>
+      </div>
+      <div style="color:var(--danger);margin-bottom:10px;">${icon('alert')}</div>
+      <h3 style="font-size:15px;margin-bottom:6px;">Couldn't connect to SharePoint</h3>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:18px;">${escapeHtml(msg||'Unknown error.')}</p>
+      <button class="btn btn-primary" id="retryConnectBtn" style="width:100%;justify-content:center;">Try Again</button>
+      <p style="font-size:11px;color:var(--text-faint);margin-top:14px;">This app keeps no local copy — nothing to fall back to until the connection succeeds.</p>
+    </div>
+  </div>`;
+  document.getElementById('retryConnectBtn').addEventListener('click', initApp);
+}
+
+/* ---------------------------- APP ENTRY POINT ---------------------------- */
+async function initApp(){
+  if(IS_LOCAL_DEV){
+    renderConnecting('Local access mode — loading guest session…');
+    try{
+      const raw = localStorage.getItem(LOCAL_DEV_DB_KEY);
+      DB = raw && JSON.parse(raw).users ? JSON.parse(raw) : seedLocalDB();
+    }catch(e){ DB = seedLocalDB(); }
+    if(!DB.users.some(u=>u.id==='guest')){ DB = seedLocalDB(); } // migrate away from any old predefined-user local data
+    DB = normalizeDB(DB);
+    if(!localStorage.getItem(LOCAL_DEV_DB_KEY)) saveDB();
+    syncStatus = 'synced'; lastSyncedAt = new Date().toISOString();
+    // Local access only — skip the login screen and go straight in as Guest.
+    sessionStorage.setItem(SESSION_KEY, DB.currentUserId);
+    authStage = 'app';
+    paint();
+    return;
+  }
+  renderConnecting('Checking Microsoft sign-in…');
+  if(!MSAL_CLIENT_ID || !msalInstance){
+    let reason = '';
+    if(!MSAL_CLIENT_ID) reason = '';
+    else if(window.__MSAL_LOAD_FAILED) reason = 'The MSAL script failed to load from the CDN (network blocked, or the CDN is down). Check your internet connection, or open the browser console for the exact network error.';
+    else reason = 'MSAL_CLIENT_ID is set, but the MSAL library object was not found on the page — check the browser console for script errors.';
+    renderSetupRequired(reason);
+    return;
+  }
+  try{
+    try{ await msalInstance.handleRedirectPromise(); }catch(e){}
+    renderConnecting('Signing in to Microsoft…');
+    await acquireGraphToken(true);
+    renderConnecting('Loading the database from SharePoint…');
+    const loaded = await loadDbFromSharePoint();
+    if(!loaded){
+      renderConnectError(`The database file wasn't found in SharePoint. Confirm the "${SP_FOLDER_PATH}" folder and the "${SP_FILE_NAME}" file exist at ${SP_HOSTNAME}${SP_SITE_PATH}, then try again.`);
+      return;
+    }
+    DB = normalizeDB(loaded);
+    syncStatus = 'synced'; lastSyncedAt = new Date().toISOString();
+    boot();
+  }catch(err){
+    renderConnectError(err.message || String(err));
+  }
+}
+
+/* ======================================================================
+   BOOT
+   ====================================================================== */
+initApp();
+</script>
+</body>
+
+</html>
