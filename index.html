@@ -1855,7 +1855,7 @@ function openEntityModal(kind, entityId){
         <div class="split-pane pane-left">
         <div class="form-row">
           <label>Record Type</label>
-          <div class="readonly-field">${kindLabel} <span class="hint">(fixed for this form — open the matching "New" button to create a different type)</span></div>
+          <div class="readonly-field">${kindLabel}</div>
         </div>
         <div class="form-row">
           <label>${nameLabel}</label>
@@ -1864,30 +1864,29 @@ function openEntityModal(kind, entityId){
 
         ${kind==='project' ? `
         <div class="form-row">
-          <label>Repository URL <span class="hint">(this project's own GitHub repo)</span></label>
+          <label>Repository URL </label>
           <input type="url" id="entRepoUrl" ${dis} value="${existing?escapeAttr(existing.repoUrl||''):''}" placeholder="https://github.com/org/repo-name">
         </div>` : `
         <div class="form-row">
-          <label>Repository <span class="hint">(one shared repo for all ${kind==='ticket'?'tickets':'Store Customization'} — set in Settings → Repositories)</span></label>
+          <label>Repository </label>
           <div class="readonly-field">${(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl) ? `<a href="${escapeAttr(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl)}" target="_blank" rel="noopener">${escapeHtml(kind==='ticket'?DB.settings.ticketRepoUrl:DB.settings.storecustRepoUrl)}</a>` : `<span class="hint">Not set yet</span>`}</div>
         </div>`}
 
         <div class="section-title" style="margin-top:4px;">
           <h3 style="font-size:13.5px;">Version</h3>
-          <span class="hint">${readOnly?'Read-only':'Editable — identity numbers are system-assigned, version segments are yours to set'}</span>
         </div>
         ${kind==='project' ? `
         <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
-          <div class="form-row"><label>Project No. (a)</label><div class="readonly-field mono" style="text-align:center;">${identity}</div></div>
-          <div class="form-row"><label>Major (b)</label><input type="number" id="verMajor" ${dis} min="0" value="${verMajor}"></div>
-          <div class="form-row"><label>Minor (c)</label><input type="number" id="verMinor" ${dis} min="0" value="${verMinor}"></div>
-          <div class="form-row"><label>Revision (d)</label><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
+          <div class="form-row"><div class="readonly-field mono" style="text-align:center;">${identity}</div></div>
+          <div class="form-row"><input type="number" id="verMajor" ${dis} min="0" value="${verMajor}"></div>
+          <div class="form-row"><input type="number" id="verMinor" ${dis} min="0" value="${verMinor}"></div>
+          <div class="form-row"><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
         </div>` : `
         <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
-          <div class="form-row"><label>Year (${kind==='ticket'?'j':'w'})</label><div class="readonly-field mono" style="text-align:center;">${identity.y}</div></div>
-          <div class="form-row"><label>Month (${kind==='ticket'?'k':'x'})</label><div class="readonly-field mono" style="text-align:center;">${identity.m}</div></div>
-          <div class="form-row"><label>${kind==='ticket'?'Ticket No. (l)':'Change No. (y)'}</label><div class="readonly-field mono" style="text-align:center;">${pad2(identity.num)}</div></div>
-          <div class="form-row"><label>Revision (${kind==='ticket'?'m':'z'})</label><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
+          <div class="form-row"><div class="readonly-field mono" style="text-align:center;">${identity.y}</div></div>
+          <div class="form-row"><div class="readonly-field mono" style="text-align:center;">${identity.m}</div></div>
+          <div class="form-row"><div class="readonly-field mono" style="text-align:center;">${pad2(identity.num)}</div></div>
+          <div class="form-row"><input type="number" id="verRevision" ${dis} min="0" value="${verRevision}"></div>
         </div>`}
         <div class="form-row" style="margin-top:-4px;">
           <label>Version preview</label>
