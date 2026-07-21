@@ -435,7 +435,9 @@ const LOCAL_DEV_DB_KEY = 'bcovc_local_dev_db';
    Until MSAL_CLIENT_ID is filled in, the app shows a setup screen instead
    of trying (and failing) to connect.
    ============================================================ */
-const MSAL_CLIENT_ID = '352803ac-f3a7-4bb6-8499-bc673f68a948'; // <<< PASTE THE AZURE AD APP (CLIENT) ID HERE
+const IS_AUTH_POPUP = !!(window.opener && window.opener !== window && /[?&#](code|error|state)=/.test(window.location.href));
+
+const MSAL_CLIENT_ID = '352803ac-f3a7-4bb6-8499-bc673f68a948'; 
 const MSAL_TENANT = 'healthyoptionsph.onmicrosoft.com';
 const MSAL_REDIRECT_URI = window.location.origin + window.location.pathname;
 const GRAPH_SCOPES = ['Sites.ReadWrite.All'];
@@ -2814,7 +2816,9 @@ async function initApp(){
 /* ======================================================================
    BOOT
    ====================================================================== */
-initApp();
+if(!IS_AUTH_POPUP){
+  initApp();
+}
 </script>
 </body>
 
