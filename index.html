@@ -583,7 +583,8 @@ function icon(name,cls){ return `<svg class="icon ${cls||''}" viewBox="0 0 24 24
 function seedDB(){
   const objectTypes = [
     {id:'tab', name:'Table', code:'TAB'},
-    {id:'pag', name:'Page', code:'PAG'},
+    {id:'pag', name:'Page (Non-API)', code:'PAG'},
+    {id:'pageapi', name:'Page (API)', code:'PAPI'},
     {id:'rep', name:'Report', code:'REP'},
     {id:'cod', name:'Codeunit', code:'COD'},
     {id:'que', name:'Query', code:'QUE'},
@@ -598,7 +599,8 @@ function seedDB(){
   ];
   const idRanges = [
     {typeId:'tab', from:50100, to:50149},
-    {typeId:'pag', from:50100, to:50149},
+    {typeId:'pag', from:50100, to:50124},
+    {typeId:'pageapi', from:50125, to:50149},
     {typeId:'rep', from:50100, to:50124},
     {typeId:'cod', from:50100, to:50149},
     {typeId:'que', from:50100, to:50109},
@@ -708,6 +710,20 @@ function normalizeDB(db){
     db.settings.extMgmt.lastRunAt = db.settings.extMgmt.lastRunAt || null;
     db.settings.extMgmt.lastRunStatus = db.settings.extMgmt.lastRunStatus || '';
     db.settings.extMgmt.lastRunError = db.settings.extMgmt.lastRunError || '';
+    db.settings.objectTypes = db.settings.objectTypes || [];
+    db.settings.idRanges = db.settings.idRanges || [];
+    // Migration: split the old single "Page" object type into Non-API and API
+    // sub-types (both still compile as AL "page" objects, so the API type gets
+    // a fresh, non-overlapping range appended right after whatever the existing
+    // Page range is currently configured as — never shrinking/moving it).
+    const pagType = db.settings.objectTypes.find(t=>t.id==='pag');
+    if(pagType && !db.settings.objectTypes.some(t=>t.id==='pageapi')){
+      if(pagType.name==='Page') pagType.name = 'Page (Non-API)';
+      db.settings.objectTypes.push({id:'pageapi', name:'Page (API)', code:'PAPI'});
+      const pagRange = db.settings.idRanges.find(r=>r.typeId==='pag');
+      const from = pagRange ? pagRange.to+1 : 50150;
+      db.settings.idRanges.push({typeId:'pageapi', from, to: from+24});
+    }
   }
   db.extSnapshots = db.extSnapshots || [];
   (db.users||[]).forEach(u=>{
@@ -1356,7 +1372,7 @@ function viewObjects(){
       <tbody>
       ${reg.map(r=>`
         <tr>
-          <td>${r.type.name}</td>
+          <td>${r.type.name}${r.type.id==='pag'?` <span class="badge drafting" style="margin-left:4px;">Non-API</span>`:''}${r.type.id==='pageapi'?` <span class="badge active" style="margin-left:4px;">API</span>`:''}</td>
           <td><code class="inline">${r.type.code}</code></td>
           <td class="mono">${r.range.from}–${r.range.to}</td>
           <td>${r.usedCount}</td>
