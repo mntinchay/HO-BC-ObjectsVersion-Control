@@ -636,7 +636,7 @@ function seedDB(){
       theme:'dark',
       objectTypes, idRanges,
       webhookUrl:'',
-      github:{owner:'', repo:'', branch:'main', manifestPath:'bc-object-manifest.json'},
+      github:{owner:'mntinchay', repo:'HO-BC-ObjectsVersion-Control', branch:'main', manifestPath:'bc-object-manifest.json'},
       passwordPolicy:{minLength:8, requireUppercase:true, requireNumber:true, requireSymbol:false},
       ticketRepoUrl:'',
       storecustRepoUrl:'',
@@ -715,6 +715,14 @@ function normalizeDB(db){
     db.settings.extMgmt.apiGroup = db.settings.extMgmt.apiGroup || '';
     db.settings.extMgmt.apiVersion = db.settings.extMgmt.apiVersion || 'v2.0';
     (db.settings.extMgmt.environments||[]).forEach(e=>{ e.companyId = e.companyId || ''; });
+    // The GitHub connection here (owner/repo/branch) is used by CI/CD and the
+    // Extension Management automation only — it's independent of the plain
+    // ticketRepoUrl / storecustRepoUrl link fields on the Repositories tab.
+    db.settings.github = db.settings.github || {owner:'',repo:'',branch:'main',manifestPath:'bc-object-manifest.json'};
+    if(!db.settings.github.owner && !db.settings.github.repo){
+      db.settings.github.owner = 'mntinchay';
+      db.settings.github.repo = 'HO-BC-ObjectsVersion-Control';
+    }
     db.settings.objectTypes = db.settings.objectTypes || [];
     db.settings.idRanges = db.settings.idRanges || [];
     // Migration: split the old single "Page" object type into Non-API and API
@@ -1674,6 +1682,7 @@ function viewCicd(){
   return `
   <div class="card" style="margin-bottom:18px;">
     <div class="section-title"><h3>${icon('cicd')} Connect a GitHub Repository</h3><span class="hint">Push directly to your repo via the GitHub Contents API</span></div>
+    <p style="font-size:11.5px;color:var(--text-faint);margin:-4px 0 12px;">This is a dedicated connection for pushing files (object ID manifest, workflow files, and the Extension Management snapshot automation) — separate from the plain Ticket/Store Customization repo links on Settings &rsaquo; Repositories.</p>
     <div class="form-grid">
       <div class="form-row"><label>Owner / Organization</label><input type="text" id="ghOwner" placeholder="e.g. my-company" value="${escapeAttr(gh.owner)}" ${canEdit?'':'disabled'}></div>
       <div class="form-row"><label>Repository</label><input type="text" id="ghRepo" placeholder="e.g. bc-object-version-control" value="${escapeAttr(gh.repo)}" ${canEdit?'':'disabled'}></div>
@@ -2301,9 +2310,9 @@ function settingsExtMgmt(){
 
   <div class="card" style="margin-bottom:18px;">
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
-    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>Repositories</b> tab). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
-      <li>Connect a repo on the <b>Repositories</b> tab first (owner, repo, branch, token with Contents: Read &amp; write)</li>
+      <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
       <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add secrets <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above</li>
       <li>${isCustom?'Grant the app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set)':'Grant the app registration Business Central Admin Center API access (Global Admin / BC Admin role)'}, plus Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented) so it can read/write the SharePoint file unattended</li>
