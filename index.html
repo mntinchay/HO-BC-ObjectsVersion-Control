@@ -710,6 +710,11 @@ function normalizeDB(db){
     db.settings.extMgmt.lastRunAt = db.settings.extMgmt.lastRunAt || null;
     db.settings.extMgmt.lastRunStatus = db.settings.extMgmt.lastRunStatus || '';
     db.settings.extMgmt.lastRunError = db.settings.extMgmt.lastRunError || '';
+    db.settings.extMgmt.apiMode = db.settings.extMgmt.apiMode || 'custom';
+    db.settings.extMgmt.apiPublisher = db.settings.extMgmt.apiPublisher || '';
+    db.settings.extMgmt.apiGroup = db.settings.extMgmt.apiGroup || '';
+    db.settings.extMgmt.apiVersion = db.settings.extMgmt.apiVersion || 'v2.0';
+    (db.settings.extMgmt.environments||[]).forEach(e=>{ e.companyId = e.companyId || ''; });
     db.settings.objectTypes = db.settings.objectTypes || [];
     db.settings.idRanges = db.settings.idRanges || [];
     // Migration: split the old single "Page" object type into Non-API and API
@@ -1838,7 +1843,10 @@ function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','
 function bcClientSecret(){ return sessionStorage.getItem('bcovc_bc_secret') || ''; }
 function setBcClientSecret(s){ if(s) sessionStorage.setItem('bcovc_bc_secret', s); else sessionStorage.removeItem('bcovc_bc_secret'); }
 function extMgmtSettings(){
-  return DB.settings.extMgmt || (DB.settings.extMgmt = {tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:''});
+  return DB.settings.extMgmt || (DB.settings.extMgmt = {
+    tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:'',
+    apiMode:'custom', apiPublisher:'', apiGroup:'', apiVersion:'v2.0',
+  });
 }
 function prodEnv(){ return (extMgmtSettings().environments||[]).find(e=>e.type==='production') || null; }
 function latestSnapshot(){ return DB.extSnapshots.length ? DB.extSnapshots[DB.extSnapshots.length-1] : null; }
@@ -1886,17 +1894,24 @@ async function bcGetToken(){
   if(!res.ok) throw new Error(data.error_description || `Token request failed (HTTP ${res.status})`);
   return data.access_token;
 }
-async function bcFetchExtensions(envName, token){
-  const res = await fetch(`https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/${encodeURIComponent(envName)}/extensions`, {
-    headers:{ 'Authorization':`Bearer ${token}` },
-  });
+async function bcFetchExtensions(env, token, em){
+  em = em || extMgmtSettings();
+  let url;
+  if(em.apiMode === 'admin'){
+    url = `https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/${encodeURIComponent(env.name)}/extensions`;
+  } else {
+    if(!em.apiPublisher || !em.apiGroup) throw new Error('Set the API Publisher and API Group first (matching what was deployed to Business Central).');
+    if(!env.companyId) throw new Error('This environment is missing a Company ID — required for the custom API.');
+    url = `https://api.businesscentral.dynamics.com/v2.0/${encodeURIComponent(em.tenantId)}/${encodeURIComponent(env.name)}/api/${encodeURIComponent(em.apiPublisher)}/${encodeURIComponent(em.apiGroup)}/${encodeURIComponent(em.apiVersion||'v2.0')}/companies(${env.companyId})/installedExtensions`;
+  }
+  const res = await fetch(url, { headers:{ 'Authorization':`Bearer ${token}` } });
   let data = {}; try{ data = await res.json(); }catch(e){}
   if(!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
   return (data.value||[]).map(e=>({
     id: e.id || e.appId || e.name,
     name: e.displayName || e.name || 'Unnamed extension',
     publisher: e.publisher || '',
-    version: [e.versionMajor,e.versionMinor,e.versionBuild,e.versionRevision].filter(v=>v!=null).join('.'),
+    version: e.version || [e.versionMajor,e.versionMinor,e.versionBuild,e.versionRevision].filter(v=>v!=null).join('.'),
     state: e.state || (e.installed===false ? 'not installed' : 'installed'),
   }));
 }
@@ -1915,7 +1930,7 @@ async function runExtensionSnapshot(manual){
   for(const env of em.environments){
     if(!env.name){ continue; }
     try{
-      const extensions = await bcFetchExtensions(env.name, token);
+      const extensions = await bcFetchExtensions(env, token, em);
       results.push({envId:env.id, envName:env.name, envLabel:env.label||env.name, envType:env.type, ok:true, extensions});
     }catch(e){
       results.push({envId:env.id, envName:env.name, envLabel:env.label||env.name, envType:env.type, ok:false, error:e.message, extensions:[]});
@@ -1973,7 +1988,13 @@ function extSnapshotScriptJs(){
  *
  * That single app registration needs BOTH of these, admin-consented:
  *   - Microsoft Graph  > Application > Sites.ReadWrite.All   (read/write the SharePoint file)
- *   - Business Central Admin Center API > Application permissions to read environment extensions
+ *   - Business Central API access — either:
+ *       (a) Custom API mode (default): normal BC user permissions in each
+ *           environment for the deployed AL extension's API (publisher/
+ *           group/version and each environment's Company ID come from
+ *           settings.extMgmt in the database file itself), or
+ *       (b) Admin Center API mode: BC Admin Center / Global Admin role,
+ *           if settings.extMgmt.apiMode is set to "admin"
  *
  * Optional repo variables (Settings > Secrets and variables > Actions > Variables)
  * override where the database file lives; defaults match the values baked
@@ -2050,8 +2071,16 @@ async function saveDb(graphToken, siteId, db) {
   if (!res.ok) throw new Error(\`Could not write the database file (HTTP \${res.status}).\`);
 }
 
-async function fetchBcExtensions(bcToken, envName) {
-  const res = await fetch(\`https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/\${encodeURIComponent(envName)}/extensions\`, {
+async function fetchBcExtensions(bcToken, env, em) {
+  let url;
+  if (em.apiMode === 'admin') {
+    url = \`https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/\${encodeURIComponent(env.name)}/extensions\`;
+  } else {
+    if (!em.apiPublisher || !em.apiGroup) throw new Error('Missing API Publisher/Group in settings.extMgmt for custom API mode.');
+    if (!env.companyId) throw new Error('Missing Company ID for this environment (required for custom API mode).');
+    url = \`https://api.businesscentral.dynamics.com/v2.0/\${encodeURIComponent(em.tenantId)}/\${encodeURIComponent(env.name)}/api/\${encodeURIComponent(em.apiPublisher)}/\${encodeURIComponent(em.apiGroup)}/\${encodeURIComponent(em.apiVersion || 'v2.0')}/companies(\${env.companyId})/installedExtensions\`;
+  }
+  const res = await fetch(url, {
     headers: { Authorization: \`Bearer \${bcToken}\` },
   });
   const data = await res.json().catch(() => ({}));
@@ -2060,7 +2089,7 @@ async function fetchBcExtensions(bcToken, envName) {
     id: e.id || e.appId || e.name,
     name: e.displayName || e.name || 'Unnamed extension',
     publisher: e.publisher || '',
-    version: [e.versionMajor, e.versionMinor, e.versionBuild, e.versionRevision].filter((v) => v != null).join('.'),
+    version: e.version || [e.versionMajor, e.versionMinor, e.versionBuild, e.versionRevision].filter((v) => v != null).join('.'),
     state: e.state || (e.installed === false ? 'not installed' : 'installed'),
   }));
 }
@@ -2102,7 +2131,7 @@ async function main() {
   for (const env of environments) {
     console.log(\`Fetching extensions for \${env.label || env.name}...\`);
     try {
-      const extensions = await fetchBcExtensions(bcToken, env.name);
+      const extensions = await fetchBcExtensions(bcToken, env, db.settings.extMgmt);
       results.push({ envId: env.id, envName: env.name, envLabel: env.label || env.name, envType: env.type, ok: true, extensions });
     } catch (e) {
       console.warn(\`  failed: \${e.message}\`);
@@ -2226,21 +2255,37 @@ function settingsExtMgmt(){
   const em = extMgmtSettings();
   const canEdit = can('setup','modify');
   const secret = bcClientSecret();
-  const ready = !!(em.clientId && em.tenantId && secret && em.environments.length);
+  const isCustom = em.apiMode !== 'admin';
+  const ready = !!(em.clientId && em.tenantId && secret && em.environments.length && (!isCustom || (em.apiPublisher && em.apiGroup)));
   const gh = ghSettings();
   const repoUrl = gh.owner && gh.repo ? `https://github.com/${gh.owner}/${gh.repo}` : '';
   return `
   <div class="card" style="margin-bottom:18px;">
-    <div class="section-title"><h3>${icon('extmgmt')} Connect to Business Central</h3><span class="hint">App-only (client credentials) connection via the BC Admin Center API</span></div>
+    <div class="section-title"><h3>${icon('extmgmt')} Connect to Business Central</h3><span class="hint">App-only (client credentials) connection</span></div>
+    <div class="form-row">
+      <label>Connection Method</label>
+      <select id="bcApiMode" ${canEdit?'':'disabled'}>
+        <option value="custom" ${isCustom?'selected':''}>Custom API (deployed AL extension, per company) — recommended</option>
+        <option value="admin" ${!isCustom?'selected':''}>BC Admin Center API (needs Global Admin / BC Admin role)</option>
+      </select>
+      <span class="hint">If Run Sync Now fails on the Admin Center API, it's almost always a permissions issue — switch to Custom API once the AL extension is deployed and use the working per-environment endpoint instead.</span>
+    </div>
     <div class="form-grid">
       <div class="form-row"><label>Tenant ID (Directory ID)</label><input type="text" id="bcTenantId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${escapeAttr(em.tenantId)}" ${canEdit?'':'disabled'}></div>
       <div class="form-row"><label>Client ID (Application ID)</label><input type="text" id="bcClientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${escapeAttr(em.clientId)}" ${canEdit?'':'disabled'}></div>
       <div class="form-row"><label>Retention (days)</label><input type="number" id="bcRetentionDays" min="1" max="90" value="${em.retentionDays||7}" ${canEdit?'':'disabled'}></div>
     </div>
+    ${isCustom?`
+    <div class="form-grid">
+      <div class="form-row"><label>API Publisher</label><input type="text" id="bcApiPublisher" placeholder="e.g. HOXT" value="${escapeAttr(em.apiPublisher)}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>API Group</label><input type="text" id="bcApiGroup" placeholder="e.g. DEVTeam" value="${escapeAttr(em.apiGroup)}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>API Version</label><input type="text" id="bcApiVersion" placeholder="v2.0" value="${escapeAttr(em.apiVersion||'v2.0')}" ${canEdit?'':'disabled'}></div>
+    </div>
+    <p style="font-size:11.5px;color:var(--text-faint);margin:-6px 0 10px;">These three plus each environment's Company ID (below) build the call: <span class="mono">.../v2.0/{tenant}/{environment}/api/{publisher}/{group}/{version}/companies({companyId})/installedExtensions</span> — matching whatever publisher/group the AL extension was published with.</p>`:''}
     <div class="form-row">
       <label>Client Secret <span class="hint">(app registration client secret value)</span></label>
       <input type="password" id="bcClientSecret" placeholder="Secret value..." value="${escapeAttr(secret)}" ${canEdit?'':'disabled'}>
-      <span class="hint">Kept in this browser tab's session storage only — same as the GitHub token on the CI/CD tab, never written to the shared SharePoint database file. Re-enter it each session. The app registration needs application-level access to the Business Central Admin Center API.</span>
+      <span class="hint">Kept in this browser tab's session storage only — same as the GitHub token on the CI/CD tab, never written to the shared SharePoint database file. Re-enter it each session.</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveBcConnection">Save Connection</button>`:''}
@@ -2256,12 +2301,12 @@ function settingsExtMgmt(){
 
   <div class="card" style="margin-bottom:18px;">
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
-    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>Repositories</b> tab). The scheduled job reads environments straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>Repositories</b> tab). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
       <li>Connect a repo on the <b>Repositories</b> tab first (owner, repo, branch, token with Contents: Read &amp; write)</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
       <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add secrets <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above</li>
-      <li>Grant that Azure AD app registration Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented), in addition to its Business Central Admin Center access — it needs both to read/write the SharePoint file unattended</li>
+      <li>${isCustom?'Grant the app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set)':'Grant the app registration Business Central Admin Center API access (Global Admin / BC Admin role)'}, plus Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented) so it can read/write the SharePoint file unattended</li>
       <li>The workflow runs daily at 16:00 UTC (12:00 AM Philippine Time) — edit the cron line directly in GitHub if a different timezone applies, since GitHub Actions schedules don't adjust for local time or DST</li>
     </ol>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -2274,7 +2319,7 @@ function settingsExtMgmt(){
     <div class="section-title"><h3>Environments</h3><span class="hint">One row per BC environment name, exactly as it appears in the Admin Center</span></div>
     <div class="table-wrap">
     <table>
-      <thead><tr><th>Environment Name</th><th>Display Label</th><th>Type</th><th></th></tr></thead>
+      <thead><tr><th>Environment Name</th><th>Display Label</th><th>Type</th>${isCustom?'<th>Company ID</th>':''}<th></th></tr></thead>
       <tbody id="bcEnvRows">
         ${(em.environments||[]).map(e=>`
         <tr data-envid="${e.id}">
@@ -2286,11 +2331,13 @@ function settingsExtMgmt(){
               <option value="sandbox" ${e.type!=='production'?'selected':''}>Sandbox</option>
             </select>
           </td>
+          ${isCustom?`<td><input type="text" class="env-companyid mono" placeholder="00000000-0000-0000-0000-000000000000" value="${escapeAttr(e.companyId||'')}" ${canEdit?'':'disabled'}></td>`:''}
           <td style="text-align:right;">${canEdit?`<button class="btn btn-icon btn-sm btn-ghost" data-delenv="${e.id}">${icon('trash')}</button>`:''}</td>
-        </tr>`).join('') || `<tr><td colspan="4" style="color:var(--text-faint);">No environments added yet.</td></tr>`}
+        </tr>`).join('') || `<tr><td colspan="${isCustom?5:4}" style="color:var(--text-faint);">No environments added yet.</td></tr>`}
       </tbody>
     </table>
     </div>
+    ${isCustom?`<p style="font-size:11.5px;color:var(--text-faint);margin-top:10px;">Find a company's ID by calling the standard <span class="mono">.../api/v2.0/companies</span> endpoint for that environment, or from Business Central's own company URL.</p>`:''}
     ${canEdit?`<div style="display:flex;gap:10px;margin-top:12px;"><button class="btn" id="addBcEnv">${icon('plus')} Add Environment</button><button class="btn btn-primary" id="saveBcEnvs">Save Environments</button></div>`:''}
   </div>
   <p style="font-size:11.5px;color:var(--text-faint);">The comparison presentation itself — current snapshot vs Production, and the 7-day trend — lives on the <b>Extension Management Comparison</b> page in the sidebar.</p>`;
@@ -2991,6 +3038,11 @@ function attachContentHandlers(){
     em.tenantId = document.getElementById('bcTenantId').value.trim();
     em.clientId = document.getElementById('bcClientId').value.trim();
     em.retentionDays = Math.max(1, parseInt(document.getElementById('bcRetentionDays').value, 10) || 7);
+    em.apiMode = document.getElementById('bcApiMode').value;
+    const pubEl = document.getElementById('bcApiPublisher'), grpEl = document.getElementById('bcApiGroup'), verEl = document.getElementById('bcApiVersion');
+    if(pubEl) em.apiPublisher = pubEl.value.trim();
+    if(grpEl) em.apiGroup = grpEl.value.trim();
+    if(verEl) em.apiVersion = verEl.value.trim() || 'v2.0';
     setBcClientSecret(document.getElementById('bcClientSecret').value.trim());
     pruneExtSnapshots();
     saveDB();
@@ -2998,6 +3050,8 @@ function attachContentHandlers(){
     toast('Connection saved.', 'success');
     render();
   });
+  const bcApiMode = document.getElementById('bcApiMode');
+  if(bcApiMode) bcApiMode.addEventListener('change', ()=>{ extMgmtSettings().apiMode = bcApiMode.value; render(); });
   const runBcSyncNow = document.getElementById('runBcSyncNow');
   if(runBcSyncNow) runBcSyncNow.addEventListener('click', ()=>{
     runBcSyncNow.disabled = true; runBcSyncNow.textContent = 'Syncing…';
@@ -3006,7 +3060,7 @@ function attachContentHandlers(){
   const addBcEnv = document.getElementById('addBcEnv');
   if(addBcEnv) addBcEnv.addEventListener('click', ()=>{
     const em = extMgmtSettings();
-    em.environments.push({id:uid(), name:'', label:'', type: em.environments.some(e=>e.type==='production') ? 'sandbox' : 'production'});
+    em.environments.push({id:uid(), name:'', label:'', companyId:'', type: em.environments.some(e=>e.type==='production') ? 'sandbox' : 'production'});
     saveDB(); render();
   });
   const saveBcEnvs = document.getElementById('saveBcEnvs');
@@ -3017,6 +3071,8 @@ function attachContentHandlers(){
       env.name = row.querySelector('.env-name').value.trim();
       env.label = row.querySelector('.env-label').value.trim();
       env.type = row.querySelector('.env-type').value;
+      const companyEl = row.querySelector('.env-companyid');
+      if(companyEl) env.companyId = companyEl.value.trim();
     });
     saveDB();
     log('Updated','settings','Extension Management environments');
