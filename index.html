@@ -1690,9 +1690,10 @@ function viewCicd(){
       <div class="form-row"><label>Manifest path in repo</label><input type="text" id="ghManifestPath" placeholder="bc-object-manifest.json" value="${escapeAttr(gh.manifestPath||'bc-object-manifest.json')}" ${canEdit?'':'disabled'}></div>
     </div>
     <div class="form-row">
-      <label>Personal Access Token <span class="hint">(fine-grained, Contents: Read &amp; write, scoped to this repo only)</span></label>
+      <label>Personal Access Token <span class="hint">(fine-grained, Contents + Workflows: Read &amp; write, scoped to this repo only)</span></label>
       <input type="password" id="ghToken" placeholder="github_pat_..." value="${escapeAttr(token)}" ${canEdit?'':'disabled'}>
       <span class="hint">Kept in this browser tab's session storage only — cleared when the tab closes, and never written to the shared SharePoint database file. Re-enter it each session; use a token scoped to just this one repo.</span>
+      <span class="hint">Needs both <b>Contents: Read &amp; write</b> and <b>Workflows: Read &amp; write</b> — Contents alone can push the manifest, but GitHub blocks writes under <span class="mono">.github/workflows/</span> without the separate Workflows permission.</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveGithubSettings">Save Connection</button>`:''}
@@ -1772,16 +1773,23 @@ async function pushManifestToGithub(){
     toast('Manifest pushed to GitHub.', 'success');
   }catch(err){ ghStatus(`Failed: ${err.message}`, 'error'); toast(`GitHub push failed: ${err.message}`, 'danger'); }
 }
+function friendlyGhError(err, path){
+  const msg = (err && err.message) || String(err);
+  if(/resource not accessible/i.test(msg) && /^\.github\/workflows\//.test(path||'')){
+    return `${msg} — GitHub requires a separate "Workflows: Read and write" permission on the token to write files under .github/workflows/, even if Contents is already Read & write. Edit the token (or generate a new fine-grained one), add Workflows access, then try again.`;
+  }
+  return msg;
+}
 async function pushWorkflowToGithub(){
   ghStatus('Pushing workflow file…');
+  const path = '.github/workflows/bc-object-id-guard.yml';
   try{
     const gh = ghSettings();
-    const path = '.github/workflows/bc-object-id-guard.yml';
     await githubPutFile(path, sampleYaml(), `Add/update BC Object ID Guard workflow (${new Date().toISOString()})`);
     log('Exported','github', path, `Pushed to ${gh.owner}/${gh.repo}@${gh.branch||'main'}`);
     ghStatus(`Workflow pushed to ${gh.owner}/${gh.repo}/${path}`, 'success');
     toast('Workflow file pushed to GitHub.', 'success');
-  }catch(err){ ghStatus(`Failed: ${err.message}`, 'error'); toast(`GitHub push failed: ${err.message}`, 'danger'); }
+  }catch(err){ const msg = friendlyGhError(err, path); ghStatus(`Failed: ${msg}`, 'error'); toast(`GitHub push failed: ${msg}`, 'danger'); }
 }
 function buildManifest(){
   return {
@@ -2225,12 +2233,13 @@ async function pushExtSnapshotScriptToGithub(){
 }
 async function pushExtSnapshotWorkflowToGithub(){
   ghStatus('Pushing snapshot workflow…');
+  const path = '.github/workflows/bc-extension-snapshot.yml';
   try{
-    await githubPutFile('.github/workflows/bc-extension-snapshot.yml', extSnapshotWorkflowYaml(), `Add/update BC extension snapshot workflow (${new Date().toISOString()})`);
-    log('Exported','github', '.github/workflows/bc-extension-snapshot.yml', `Pushed to ${ghSettings().owner}/${ghSettings().repo}@${ghSettings().branch||'main'}`);
+    await githubPutFile(path, extSnapshotWorkflowYaml(), `Add/update BC extension snapshot workflow (${new Date().toISOString()})`);
+    log('Exported','github', path, `Pushed to ${ghSettings().owner}/${ghSettings().repo}@${ghSettings().branch||'main'}`);
     ghStatus('Snapshot workflow pushed.', 'success');
     toast('Snapshot workflow pushed to GitHub.', 'success');
-  }catch(err){ ghStatus(`Failed: ${err.message}`, 'error'); toast(`GitHub push failed: ${err.message}`, 'danger'); }
+  }catch(err){ const msg = friendlyGhError(err, path); ghStatus(`Failed: ${msg}`, 'error'); toast(`GitHub push failed: ${msg}`, 'danger'); }
 }
 async function pushExtSnapshotAutomationToGithub(){
   await pushExtSnapshotScriptToGithub();
@@ -2312,7 +2321,7 @@ function settingsExtMgmt(){
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
     <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
-      <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab</li>
+      <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents + Workflows: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
       <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add secrets <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above</li>
       <li>${isCustom?'Grant the app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set)':'Grant the app registration Business Central Admin Center API access (Global Admin / BC Admin role)'}, plus Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented) so it can read/write the SharePoint file unattended</li>
