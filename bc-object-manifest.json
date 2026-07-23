@@ -1,0 +1,1277 @@
+{
+  "generatedAt": "2026-07-23T07:44:09.572Z",
+  "repositories": {
+    "ticket": null,
+    "storecust": null,
+    "projects": [
+      {
+        "code": "PRJ-1",
+        "name": "ERP AL Enh - HOCustomization2025",
+        "repoUrl": null
+      },
+      {
+        "code": "PRJ-2",
+        "name": "ERP AL Enh - StaffShop",
+        "repoUrl": null
+      },
+      {
+        "code": "PRJ-3",
+        "name": "ERP AL Enh - Development Tool",
+        "repoUrl": null
+      },
+      {
+        "code": "PRJ-4",
+        "name": "ERP AL Enh - Project Yogi",
+        "repoUrl": null
+      },
+      {
+        "code": "PRJ-5",
+        "name": "ERP AL Enh - Custom API",
+        "repoUrl": null
+      },
+      {
+        "code": "PRJ-6",
+        "name": "ERP AL Enh - Project Canele",
+        "repoUrl": null
+      }
+    ]
+  },
+  "objectRanges": [
+    {
+      "typeId": "tab",
+      "from": 99000,
+      "to": 99999,
+      "last": 99011,
+      "type": "TAB"
+    },
+    {
+      "typeId": "pag",
+      "from": 99000,
+      "to": 99999,
+      "last": 99009,
+      "type": "PAG"
+    },
+    {
+      "typeId": "rep",
+      "from": 99000,
+      "to": 99999,
+      "last": 99007,
+      "type": "REP"
+    },
+    {
+      "typeId": "cod",
+      "from": 99000,
+      "to": 99999,
+      "last": 99008,
+      "type": "COD"
+    },
+    {
+      "typeId": "que",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "QUE"
+    },
+    {
+      "typeId": "xml",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "XML"
+    },
+    {
+      "typeId": "enu",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "ENU"
+    },
+    {
+      "typeId": "enx",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "ENX"
+    },
+    {
+      "typeId": "pst",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "PST"
+    },
+    {
+      "typeId": "int",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "INT"
+    },
+    {
+      "typeId": "ot9re8n",
+      "from": 99000,
+      "to": 99999,
+      "last": null,
+      "type": "ENUEXT"
+    },
+    {
+      "typeId": "otqd3cw",
+      "from": 99000,
+      "to": 99999,
+      "last": 99002,
+      "type": "PER"
+    },
+    {
+      "typeId": "otf0pgu",
+      "from": 99000,
+      "to": 99999,
+      "last": 99025,
+      "type": "PAGEXT"
+    },
+    {
+      "typeId": "otmowpk",
+      "from": 99000,
+      "to": 99999,
+      "last": 99004,
+      "type": "TABEXT"
+    },
+    {
+      "typeId": "otrqu8t",
+      "from": 99000,
+      "to": 99999,
+      "last": 99000,
+      "type": "REPEXT"
+    },
+    {
+      "typeId": "pageapi",
+      "from": 75000,
+      "to": 75999,
+      "last": 75015,
+      "type": "PAPI"
+    }
+  ],
+  "allocations": [
+    {
+      "objectType": "TAB",
+      "objectId": 99000,
+      "description": "Member Summary Point Entry",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 99003,
+      "description": "Mebership Point Report Archive",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99000,
+      "description": "Membership Points Adj. Card",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99000,
+      "description": "Field MetaData Hgd",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99001,
+      "description": "Inactive Member Points Report",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99002,
+      "description": "ActiveToInactiveMemberPoints",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99003,
+      "description": "MonthlyMembershipPoints",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99004,
+      "description": "Block NON-V Members",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99005,
+      "description": "Block V-Members",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 81000,
+      "description": "Field Transfers Mgt. HO",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99000,
+      "description": "MemberFunctions",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 81000,
+      "description": "HOGeneral_Ledger_Entries81000",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 81001,
+      "description": "HOPurchase_Order81001",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 81002,
+      "description": "HOPurchase_Order_List81002",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99000,
+      "description": "User Setup Page Ext",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99003,
+      "description": "LSC Purchase Contract ext",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99004,
+      "description": "Whse. Receipt Subform ext",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 81000,
+      "description": "HOPurchase_Header",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99000,
+      "description": "Items",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99002,
+      "description": "User Setup ext",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99003,
+      "description": "LSC Member Account ext",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PER",
+      "objectId": 99000,
+      "description": "HOCusPermission",
+      "owner": "PRJ-1",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - HOCustomization2025",
+      "ownerRepo": null,
+      "version": "1.1.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99006,
+      "description": "StaffShop Receipt",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "REP",
+      "objectId": 99007,
+      "description": "StaffShopReceiptNEW",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99003,
+      "description": "StaffShopEvents",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99001,
+      "description": "LSC Retail Sales Order ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99002,
+      "description": "LSC Retail Sales Order List ex",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99005,
+      "description": "Posted Sales Invoice ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99006,
+      "description": "Posted Sales Invoices ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99007,
+      "description": "Retail Sales Credit Memo",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99008,
+      "description": "Retail Sales Credit Memos",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99009,
+      "description": "Posted Sales Credit Memo Ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99010,
+      "description": "Posted Sales Credit Memos ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "REPEXT",
+      "objectId": 99000,
+      "description": "Sales - Order Conf. ext",
+      "owner": "PRJ-2",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - StaffShop",
+      "ownerRepo": null,
+      "version": "2.0.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 99001,
+      "description": "ERPENH-DataDeletion",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.1.1.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99001,
+      "description": "ERPENH-DataDeletion",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.1.1.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PER",
+      "objectId": 99002,
+      "description": "HO Custom-DevTool",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.1.1.1",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99008,
+      "description": "HOXT-AutoEnablePrevNegInv",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.1.1.1",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 99002,
+      "description": "ERPENH-MembershipPointReport",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 99004,
+      "description": "HOXT-MemCheckStatusHeader",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 99005,
+      "description": "HOXT-MemCheckStatusLines",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99002,
+      "description": "ERPENH-MembershipPointReport",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99006,
+      "description": "HOXT-MemCheckStatusHeader",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99007,
+      "description": "HOXT-MemCheckStatusLines",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99001,
+      "description": "ERPENH-MembershipPointReport",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99006,
+      "description": "HOXT-MemCheckStatusProcess",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99021,
+      "description": "ERPENH-MemAccount 05232026",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99001,
+      "description": "ERPENH-MemberPointEntryExt",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "PER",
+      "objectId": 99001,
+      "description": "HOCustom-Yogi",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 99007,
+      "description": "HOXT-MemAcctCorrection",
+      "owner": "PRJ-4",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Yogi",
+      "ownerRepo": null,
+      "version": "4.1.0.2",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 98000,
+      "description": "Actual Inv by Loc",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "TAB",
+      "objectId": 98001,
+      "description": "Actual Inv by Loc Entries",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75000,
+      "description": "NAV_Inventory Posting Group",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75001,
+      "description": "NAV_Gen. Bus. Posting Group",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75002,
+      "description": "NAV_Gen. Prod. Posting Group",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75003,
+      "description": "NAV_General Posting Setup",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75004,
+      "description": "NAV_VATBusPostingGroup",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75005,
+      "description": "NAV_VATProdPostingGroup",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75006,
+      "description": "NAV_VATPostingGroup",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75007,
+      "description": "NAV_Item Category",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75008,
+      "description": "NAV_Retail Product Group",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75009,
+      "description": "NAV_Division",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75010,
+      "description": "NAV_Item",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75011,
+      "description": "NAV_ItemUnitofMeasurement",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75012,
+      "description": "NAV_SalesPrice",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 75013,
+      "description": "NAV_UnitOfMeasure",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98000,
+      "description": "Process Actual Inv by Loc List",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98001,
+      "description": "Actual Inv by Loc API",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98002,
+      "description": "HO Items by Location",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98003,
+      "description": "HO Items by Location Matrix",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98004,
+      "description": "HOPurchanseLineAPI",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98020,
+      "description": "Purchase_Header",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98021,
+      "description": "Purchase_Line",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98036,
+      "description": "Transfer_Headers",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98037,
+      "description": "Transfer_Line API",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98076,
+      "description": "LSC_Trans__Coupon_Entry",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98086,
+      "description": "LSC_Member_Account",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98087,
+      "description": "LSC_Member_Contact",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98088,
+      "description": "LSC_Membership_Card",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98089,
+      "description": "LSC_Member_Point_Entry",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98090,
+      "description": "LSC_Member_Account_Upgr__Entry",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 98091,
+      "description": "LSC_Member_Scheme",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "QUE",
+      "objectId": 98000,
+      "description": "InventoryPerLocation",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "QUE",
+      "objectId": 98001,
+      "description": "QtySoldNotPosted",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 98000,
+      "description": "InsertInventoryAndSalesData",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "COD",
+      "objectId": 98001,
+      "description": "InsertInventoryAndSalesDataV2",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PER",
+      "objectId": 98000,
+      "description": "HOAPIPermission",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99009,
+      "description": "HOXT-PublishedApplication",
+      "owner": "PRJ-5",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Custom API",
+      "ownerRepo": null,
+      "version": "5.0.2.3",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99025,
+      "description": "HOXT-Item 260721",
+      "owner": "PRJ-6",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Canele",
+      "ownerRepo": null,
+      "version": "6.1.0.0",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99004,
+      "description": "HOXT-Item 260721",
+      "owner": "PRJ-6",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Project Canele",
+      "ownerRepo": null,
+      "version": "6.1.0.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99016,
+      "description": "ERPENH-PurchOrdArch 20260408",
+      "owner": "TCK-2604-01-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-22618",
+      "ownerRepo": null,
+      "version": "26.4.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99017,
+      "description": "ERPENH-Rvaluationjrnl 20260408",
+      "owner": "TCK-2604-01-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-22618",
+      "ownerRepo": null,
+      "version": "26.4.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99018,
+      "description": "ERPENH-RETITEM 20260420",
+      "owner": "TCK-2604-02-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-23004",
+      "ownerRepo": null,
+      "version": "26.4.2.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99019,
+      "description": "ERPENH-PstPurchInvLine20260430",
+      "owner": "TCK-2605-00-01",
+      "ownerKind": "ticket",
+      "ownerName": "INC-23401",
+      "ownerRepo": null,
+      "version": "26.5.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99020,
+      "description": "ERPENH-VATEntries20260430",
+      "owner": "TCK-2605-00-01",
+      "ownerKind": "ticket",
+      "ownerName": "INC-23401",
+      "ownerRepo": null,
+      "version": "26.5.0.1",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99023,
+      "description": "HOXT-PRRDMList 20260619",
+      "owner": "TCK-2606-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-25331",
+      "ownerRepo": null,
+      "version": "26.6.0.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAG",
+      "objectId": 99008,
+      "description": "HOXT-PRR DM Items",
+      "owner": "TCK-2606-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-25331",
+      "ownerRepo": null,
+      "version": "26.6.0.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99024,
+      "description": "HOXT-LSCStoreInvLine260706",
+      "owner": "TCK-2607-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-10814",
+      "ownerRepo": null,
+      "version": "26.7.0.0",
+      "status": "drafting"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99012,
+      "description": "ERPEnh-INC15135-Ret.ItemList",
+      "owner": "TCK-2607-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-10814",
+      "ownerRepo": null,
+      "version": "26.7.0.0",
+      "status": "drafting"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99013,
+      "description": "ERPEnh-INC15135-ItemList",
+      "owner": "TCK-2607-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-10814",
+      "ownerRepo": null,
+      "version": "26.7.0.0",
+      "status": "drafting"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99014,
+      "description": "ERPEnh-INC15135-Ret.ItemCard",
+      "owner": "TCK-2607-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-10814",
+      "ownerRepo": null,
+      "version": "26.7.0.0",
+      "status": "drafting"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99015,
+      "description": "ERPEnh-INC15135-ItemCard",
+      "owner": "TCK-2607-00-00",
+      "ownerKind": "ticket",
+      "ownerName": "INC-10814",
+      "ownerRepo": null,
+      "version": "26.7.0.0",
+      "status": "drafting"
+    }
+  ]
+}
