@@ -2003,7 +2003,11 @@ async function dispatchExtSnapshotWorkflow(){
   });
   if(res.status !== 204){
     let body = null; try{ body = await res.json(); }catch(e){}
-    throw new Error((body && body.message) || `GitHub API error (HTTP ${res.status})`);
+    let msg = (body && body.message) || `GitHub API error (HTTP ${res.status})`;
+    if(/resource not accessible/i.test(msg)){
+      msg = `${msg} — triggering a workflow run needs a separate "Actions: Read and write" permission on the token (Contents/Workflows alone don't cover it). Also confirm the token's repository access includes this repo, and that the workflow file has been pushed to the repo's default branch.`;
+    }
+    throw new Error(msg);
   }
 }
 async function refreshDbFromSharePoint(){
