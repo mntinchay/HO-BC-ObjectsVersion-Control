@@ -1690,10 +1690,10 @@ function viewCicd(){
       <div class="form-row"><label>Manifest path in repo</label><input type="text" id="ghManifestPath" placeholder="bc-object-manifest.json" value="${escapeAttr(gh.manifestPath||'bc-object-manifest.json')}" ${canEdit?'':'disabled'}></div>
     </div>
     <div class="form-row">
-      <label>Personal Access Token <span class="hint">(fine-grained, Contents + Workflows: Read &amp; write, scoped to this repo only)</span></label>
+      <label>Personal Access Token <span class="hint">(fine-grained, Contents + Workflows + Actions: Read &amp; write, scoped to this repo only)</span></label>
       <input type="password" id="ghToken" placeholder="github_pat_..." value="${escapeAttr(token)}" ${canEdit?'':'disabled'}>
       <span class="hint">Kept in this browser tab's session storage only — cleared when the tab closes, and never written to the shared SharePoint database file. Re-enter it each session; use a token scoped to just this one repo.</span>
-      <span class="hint">Needs both <b>Contents: Read &amp; write</b> and <b>Workflows: Read &amp; write</b> — Contents alone can push the manifest, but GitHub blocks writes under <span class="mono">.github/workflows/</span> without the separate Workflows permission.</span>
+      <span class="hint">Needs <b>Contents: Read &amp; write</b> (push files), <b>Workflows: Read &amp; write</b> (write under <span class="mono">.github/workflows/</span>), and <b>Actions: Read &amp; write</b> (lets Extension Management's "Run Sync Now" trigger a workflow run on demand).</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveGithubSettings">Save Connection</button>`:''}
@@ -1965,9 +1965,18 @@ async function runExtensionSnapshot(manual){
   toast(anyFailed ? 'Extension snapshot captured with some errors — see connection status.' : 'Extension snapshot captured.', anyFailed?'warning':'success');
   render();
 }
-// Scheduling: fires once at the next local midnight, then every 24h after that,
-// for as long as this browser tab stays open. There's no background worker here,
-// so a tab that's closed at midnight simply picks up on next open / manual sync.
+// NOTE ON WHY THIS ISN'T AUTO-RUN FROM THE BROWSER:
+// Microsoft's identity platform does not send CORS headers on the
+// client-credentials token endpoint, so a browser tab can never
+// successfully call login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+// directly — it always fails with a generic "Failed to fetch", regardless
+// of how correct the Tenant/Client/Secret values are. This is a platform
+// limitation, not a config bug (confidential-client / secret-based flows
+// are only ever meant to run server-side). runExtensionSnapshot() below is
+// kept for reference/local testing in a non-browser context, but it is
+// deliberately NOT wired up to run automatically here — see
+// dispatchExtSnapshotWorkflow() instead, which triggers the same logic on
+// GitHub's own servers (server-side, so CORS doesn't apply there).
 let extSchedTimer = null, extSchedStarted = false;
 function scheduleExtensionSnapshot(){
   clearTimeout(extSchedTimer);
@@ -1980,9 +1989,29 @@ function scheduleExtensionSnapshot(){
   }, ms);
 }
 function ensureExtScheduleStarted(){
-  if(extSchedStarted || IS_LOCAL_DEV) return; // local-dev mode has no real BC connection to run against
-  extSchedStarted = true;
-  scheduleExtensionSnapshot();
+  // Intentionally a no-op — see note above. The real schedule lives in the
+  // GitHub Actions workflow's cron trigger, which actually works.
+  return;
+}
+async function dispatchExtSnapshotWorkflow(){
+  const gh = ghSettings();
+  if(!gh.owner || !gh.repo || !ghToken()) throw new Error('Connect GitHub on the CI/CD tab first (owner, repo, token with Actions: Read & write) and push the snapshot automation.');
+  const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/workflows/bc-extension-snapshot.yml/dispatches`, {
+    method:'POST',
+    headers:{ 'Authorization':`Bearer ${ghToken()}`, 'Accept':'application/vnd.github+json', 'Content-Type':'application/json' },
+    body: JSON.stringify({ ref: gh.branch || 'main' }),
+  });
+  if(res.status !== 204){
+    let body = null; try{ body = await res.json(); }catch(e){}
+    throw new Error((body && body.message) || `GitHub API error (HTTP ${res.status})`);
+  }
+}
+async function refreshDbFromSharePoint(){
+  if(IS_LOCAL_DEV) return;
+  const fresh = await loadDbFromSharePoint();
+  if(!fresh) throw new Error('Database file not found on SharePoint yet.');
+  DB = normalizeDB(fresh);
+  render();
 }
 
 function extSnapshotScriptJs(){
@@ -2261,6 +2290,7 @@ function viewExtMgmt(){
       <br>Connection, environments and the GitHub Actions schedule are managed in <b>Settings &rsaquo; Extension Management</b>.
     </div>
     ${can('setup','view')?`<button class="btn btn-ghost" id="goToExtSettings">${icon('settings')} Go to Settings</button>`:''}
+    <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from SharePoint</button>
   </div>
 
   <div class="tabs">
@@ -2274,19 +2304,22 @@ function settingsExtMgmt(){
   const canEdit = can('setup','modify');
   const secret = bcClientSecret();
   const isCustom = em.apiMode !== 'admin';
-  const ready = !!(em.clientId && em.tenantId && secret && em.environments.length && (!isCustom || (em.apiPublisher && em.apiGroup)));
   const gh = ghSettings();
   const repoUrl = gh.owner && gh.repo ? `https://github.com/${gh.owner}/${gh.repo}` : '';
+  const syncReady = !!(gh.owner && gh.repo && ghToken() && em.environments.length);
   return `
+  <div class="card" style="margin-bottom:18px;background:var(--accent-soft, rgba(99,102,241,0.08));">
+    <p style="font-size:12px;color:var(--text-dim);margin:0;">${icon('alert')} <b>Direct browser sync isn't possible here.</b> Microsoft's identity platform doesn't allow the client-credentials token request to be made from a browser (no CORS headers on that endpoint — it always fails with "Failed to fetch", regardless of how correct your Tenant/Client/Secret are). This isn't a bug to configure around; it's by design, since secret-based connections are only meant to run server-side. All syncing — scheduled and on-demand — runs through <b>GitHub Actions</b> instead. Fill in the connection details below (they're read by that GitHub job), then use <b>Run Sync Now</b> to trigger it on demand.</p>
+  </div>
+
   <div class="card" style="margin-bottom:18px;">
-    <div class="section-title"><h3>${icon('extmgmt')} Connect to Business Central</h3><span class="hint">App-only (client credentials) connection</span></div>
+    <div class="section-title"><h3>${icon('extmgmt')} Business Central Connection Details</h3><span class="hint">App-only (client credentials) — used by the GitHub Actions job, not by this browser tab</span></div>
     <div class="form-row">
       <label>Connection Method</label>
       <select id="bcApiMode" ${canEdit?'':'disabled'}>
         <option value="custom" ${isCustom?'selected':''}>Custom API (deployed AL extension, per company) — recommended</option>
         <option value="admin" ${!isCustom?'selected':''}>BC Admin Center API (needs Global Admin / BC Admin role)</option>
       </select>
-      <span class="hint">If Run Sync Now fails on the Admin Center API, it's almost always a permissions issue — switch to Custom API once the AL extension is deployed and use the working per-environment endpoint instead.</span>
     </div>
     <div class="form-grid">
       <div class="form-row"><label>Tenant ID (Directory ID)</label><input type="text" id="bcTenantId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${escapeAttr(em.tenantId)}" ${canEdit?'':'disabled'}></div>
@@ -2303,17 +2336,19 @@ function settingsExtMgmt(){
     <div class="form-row">
       <label>Client Secret <span class="hint">(app registration client secret value)</span></label>
       <input type="password" id="bcClientSecret" placeholder="Secret value..." value="${escapeAttr(secret)}" ${canEdit?'':'disabled'}>
-      <span class="hint">Kept in this browser tab's session storage only — same as the GitHub token on the CI/CD tab, never written to the shared SharePoint database file. Re-enter it each session.</span>
+      <span class="hint">Kept in this browser tab's session storage only, same as the GitHub token — never written to the shared SharePoint database file. You'll also paste this same value into the repo's <span class="mono">BC_CLIENT_SECRET</span> GitHub Actions secret, since that's where it's actually used.</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveBcConnection">Save Connection</button>`:''}
-      <button class="btn btn-primary" id="runBcSyncNow" ${ready?'':'disabled'}>${icon('upload')} Run Sync Now</button>
+      <button class="btn btn-primary" id="runBcSyncNow" ${syncReady?'':'disabled'} title="${syncReady?'':'Connect GitHub on the CI/CD tab and add at least one environment first'}">${icon('upload')} Run Sync Now (via GitHub Actions)</button>
+      <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from SharePoint</button>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--text-faint);">
       ${em.lastRunAt
         ? `Last sync: ${timeAgo(em.lastRunAt)} — ${em.lastRunStatus==='error'?`<span style="color:var(--danger);">issues: ${escapeHtml(em.lastRunError||'')}</span>`:'<span style="color:var(--success);">success</span>'}`
         : 'No sync has run yet.'}
-      <br>The in-app scheduler below only fires while this tab is open at midnight — use the GitHub Actions automation underneath for a schedule that runs even when nobody has the app open.
+      <br>Triggering a run doesn't finish instantly — GitHub usually takes under a minute. Click <b>Refresh from SharePoint</b> after that (or reload the page) to pull in the result without waiting for the next auto-save.
+
     </div>
   </div>
 
@@ -2321,7 +2356,7 @@ function settingsExtMgmt(){
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
     <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
-      <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents + Workflows: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab</li>
+      <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents + Workflows + Actions: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab. The <b>Actions</b> permission is what lets the "Run Sync Now" button trigger a run on demand.</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
       <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add secrets <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above</li>
       <li>${isCustom?'Grant the app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set)':'Grant the app registration Business Central Admin Center API access (Global Admin / BC Admin role)'}, plus Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented) so it can read/write the SharePoint file unattended</li>
@@ -3071,9 +3106,28 @@ function attachContentHandlers(){
   const bcApiMode = document.getElementById('bcApiMode');
   if(bcApiMode) bcApiMode.addEventListener('change', ()=>{ extMgmtSettings().apiMode = bcApiMode.value; render(); });
   const runBcSyncNow = document.getElementById('runBcSyncNow');
-  if(runBcSyncNow) runBcSyncNow.addEventListener('click', ()=>{
-    runBcSyncNow.disabled = true; runBcSyncNow.textContent = 'Syncing…';
-    runExtensionSnapshot(true);
+  if(runBcSyncNow) runBcSyncNow.addEventListener('click', async ()=>{
+    const original = runBcSyncNow.textContent;
+    runBcSyncNow.disabled = true; runBcSyncNow.textContent = 'Triggering…';
+    try{
+      await dispatchExtSnapshotWorkflow();
+      toast('Triggered on GitHub Actions — usually finishes in under a minute. Use "Refresh from SharePoint" shortly to see the result.', 'success');
+    }catch(err){
+      toast(`Could not trigger sync: ${err.message}`, 'danger');
+    }
+    runBcSyncNow.disabled = false; runBcSyncNow.textContent = original;
+  });
+  const refreshExtDb = document.getElementById('refreshExtDb');
+  if(refreshExtDb) refreshExtDb.addEventListener('click', async ()=>{
+    const original = refreshExtDb.textContent;
+    refreshExtDb.disabled = true; refreshExtDb.textContent = 'Refreshing…';
+    try{
+      await refreshDbFromSharePoint();
+      toast('Refreshed from SharePoint.', 'success');
+    }catch(err){
+      toast(`Refresh failed: ${err.message}`, 'danger');
+      refreshExtDb.disabled = false; refreshExtDb.textContent = original;
+    }
   });
   const addBcEnv = document.getElementById('addBcEnv');
   if(addBcEnv) addBcEnv.addEventListener('click', ()=>{
