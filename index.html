@@ -1836,9 +1836,10 @@ jobs:
 
       - name: Notify on failure
         if: failure()
-        run: curl -X POST "\${{ secrets.WEBHOOK_URL }}" \\
-          -H "Content-Type: application/json" \\
-          -d '{"text":"Object ID collision detected in PR #\${{ github.event.number }}"}'`;
+        run: |
+          curl -X POST "\${{ secrets.WEBHOOK_URL }}" \\
+            -H "Content-Type: application/json" \\
+            -d '{"text":"Object ID collision detected in PR #\${{ github.event.number }}"}'`;
 }
 function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
