@@ -2032,14 +2032,26 @@ function extSnapshotScriptJs(){
  * you configure in the UI are exactly what gets snapshotted here — no
  * separate config to keep in sync.
  *
- * Required repo secrets (Settings > Secrets and variables > Actions):
- *   BC_TENANT_ID      Azure AD tenant (directory) ID
- *   BC_CLIENT_ID      Azure AD app registration (client) ID
- *   BC_CLIENT_SECRET  Client secret value for that app registration
+ * TWO SEPARATE APP REGISTRATIONS ARE USED ON PURPOSE:
+ *   - one for SharePoint (Microsoft Graph), one for Business Central.
+ * This keeps the BC-facing app registration (which other teams may also
+ * use/manage) from needing broad tenant-wide SharePoint write access —
+ * useful when you aren't the Azure AD admin for that app and don't want
+ * to request a permission change on it just for this feature.
  *
- * That single app registration needs BOTH of these, admin-consented:
- *   - Microsoft Graph  > Application > Sites.ReadWrite.All   (read/write the SharePoint file)
- *   - Business Central API access — either:
+ * Required repo secrets (Settings > Secrets and variables > Actions):
+ *   SP_CLIENT_ID       Azure AD app registration (client) ID — SharePoint only
+ *   SP_CLIENT_SECRET   Client secret value for that app registration
+ *   SP_TENANT_ID       (optional) Azure AD tenant ID for the SharePoint app,
+ *                      if different from BC_TENANT_ID — otherwise omit and
+ *                      BC_TENANT_ID is reused
+ *   BC_TENANT_ID       Azure AD tenant (directory) ID
+ *   BC_CLIENT_ID       Azure AD app registration (client) ID — Business Central only
+ *   BC_CLIENT_SECRET   Client secret value for that app registration
+ *
+ * Permissions needed on each:
+ *   SP_CLIENT_ID  → Microsoft Graph > Application > Sites.ReadWrite.All (admin-consented)
+ *   BC_CLIENT_ID  → Business Central API access — either:
  *       (a) Custom API mode (default): normal BC user permissions in each
  *           environment for the deployed AL extension's API (publisher/
  *           group/version and each environment's Company ID come from
@@ -2056,9 +2068,13 @@ function extSnapshotScriptJs(){
  *   SP_FILE_NAME    default: bcovc-database.json
  */
 
-const TENANT_ID = process.env.BC_TENANT_ID;
-const CLIENT_ID = process.env.BC_CLIENT_ID;
-const CLIENT_SECRET = process.env.BC_CLIENT_SECRET;
+const BC_TENANT_ID = process.env.BC_TENANT_ID;
+const BC_CLIENT_ID = process.env.BC_CLIENT_ID;
+const BC_CLIENT_SECRET = process.env.BC_CLIENT_SECRET;
+
+const SP_TENANT_ID = process.env.SP_TENANT_ID || BC_TENANT_ID;
+const SP_CLIENT_ID = process.env.SP_CLIENT_ID;
+const SP_CLIENT_SECRET = process.env.SP_CLIENT_SECRET;
 
 const SP_HOSTNAME = process.env.SP_HOSTNAME || 'healthyoptionsph.sharepoint.com';
 const SP_SITE_PATH = process.env.SP_SITE_PATH || '/sites/IT-SP';
@@ -2074,14 +2090,14 @@ function encodeGraphPath(path) {
   return path.split('/').map(encodeURIComponent).join('/');
 }
 
-async function getToken(scope) {
-  const res = await fetch(\`https://login.microsoftonline.com/\${encodeURIComponent(TENANT_ID)}/oauth2/v2.0/token\`, {
+async function getToken(tenantId, clientId, clientSecret, scope) {
+  const res = await fetch(\`https://login.microsoftonline.com/\${encodeURIComponent(tenantId)}/oauth2/v2.0/token\`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       scope,
     }),
   });
@@ -2156,12 +2172,15 @@ function pruneSnapshots(db) {
 }
 
 async function main() {
-  if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
+  if (!SP_CLIENT_ID || !SP_CLIENT_SECRET || !SP_TENANT_ID) {
+    fail('Missing SP_CLIENT_ID / SP_CLIENT_SECRET (or BC_TENANT_ID as a fallback for SP_TENANT_ID) repo secrets — this is the dedicated SharePoint-only app registration.');
+  }
+  if (!BC_TENANT_ID || !BC_CLIENT_ID || !BC_CLIENT_SECRET) {
     fail('Missing BC_TENANT_ID / BC_CLIENT_ID / BC_CLIENT_SECRET repo secrets.');
   }
 
-  console.log('Requesting Microsoft Graph token...');
-  const graphToken = await getToken('https://graph.microsoft.com/.default');
+  console.log('Requesting Microsoft Graph token (SharePoint app registration)...');
+  const graphToken = await getToken(SP_TENANT_ID, SP_CLIENT_ID, SP_CLIENT_SECRET, 'https://graph.microsoft.com/.default');
   const siteId = await getSiteId(graphToken);
 
   console.log('Loading database from SharePoint...');
@@ -2175,8 +2194,8 @@ async function main() {
     fail('No environments configured. Add at least one environment in the app\\'s Extension Management Comparison tab first.');
   }
 
-  console.log('Requesting Business Central token...');
-  const bcToken = await getToken('https://api.businesscentral.dynamics.com/.default');
+  console.log('Requesting Business Central token (BC app registration)...');
+  const bcToken = await getToken(BC_TENANT_ID, BC_CLIENT_ID, BC_CLIENT_SECRET, 'https://api.businesscentral.dynamics.com/.default');
 
   const results = [];
   for (const env of environments) {
@@ -2248,6 +2267,9 @@ jobs:
           BC_TENANT_ID: \${{ secrets.BC_TENANT_ID }}
           BC_CLIENT_ID: \${{ secrets.BC_CLIENT_ID }}
           BC_CLIENT_SECRET: \${{ secrets.BC_CLIENT_SECRET }}
+          SP_TENANT_ID: \${{ secrets.SP_TENANT_ID }}
+          SP_CLIENT_ID: \${{ secrets.SP_CLIENT_ID }}
+          SP_CLIENT_SECRET: \${{ secrets.SP_CLIENT_SECRET }}
           SP_HOSTNAME: \${{ vars.SP_HOSTNAME }}
           SP_SITE_PATH: \${{ vars.SP_SITE_PATH }}
           SP_FOLDER_PATH: \${{ vars.SP_FOLDER_PATH }}
@@ -2359,12 +2381,12 @@ function settingsExtMgmt(){
 
   <div class="card" style="margin-bottom:18px;">
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
-    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync.</p>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync. It uses <b>two separate Azure AD app registrations</b> on purpose: one for Business Central, one just for SharePoint — so the BC-facing registration (which other teams may also use) never needs broad tenant-wide SharePoint access.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
       <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents + Workflows + Actions: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab. The <b>Actions</b> permission is what lets the "Run Sync Now" button trigger a run on demand.</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
-      <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add secrets <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above</li>
-      <li>${isCustom?'Grant the app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set)':'Grant the app registration Business Central Admin Center API access (Global Admin / BC Admin role)'}, plus Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span> (admin consented) so it can read/write the SharePoint file unattended</li>
+      <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add the <b>Business Central</b> secrets: <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above. ${isCustom?'Grant that app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set).':'Grant that app registration Business Central Admin Center API access (Global Admin / BC Admin role).'}</li>
+      <li>Add a <b>second, dedicated</b> app registration just for SharePoint — ideal if you're not the Azure AD admin for the BC app registration and don't want to request wider permissions on it. Add its secrets: <span class="mono">SP_CLIENT_ID</span>, <span class="mono">SP_CLIENT_SECRET</span>, and (only if it's in a different tenant) <span class="mono">SP_TENANT_ID</span>. Have an admin grant it Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span>, admin-consented — that's the only permission it needs.</li>
       <li>The workflow runs daily at 16:00 UTC (12:00 AM Philippine Time) — edit the cron line directly in GitHub if a different timezone applies, since GitHub Actions schedules don't adjust for local time or DST</li>
     </ol>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
