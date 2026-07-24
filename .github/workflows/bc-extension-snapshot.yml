@@ -1,0 +1,38 @@
+name: BC Extension Snapshot
+
+on:
+  schedule:
+    # Cron is UTC only and does not adjust for DST. 16:00 UTC = 12:00 AM
+    # Philippine Time (UTC+8). Edit this line directly in GitHub if your
+    # target timezone changes.
+    - cron: '0 16 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Run extension snapshot
+        env:
+          BC_TENANT_ID: ${{ secrets.BC_TENANT_ID }}
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
+        run: node scripts/run-extension-snapshot.js
+
+      - name: Commit updated snapshot data
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extmgmt-data.json 2>/dev/null || { echo "extmgmt-data.json not present — nothing to commit."; exit 0; }
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "Extension snapshot ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push
