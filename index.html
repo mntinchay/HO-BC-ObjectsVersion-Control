@@ -526,7 +526,13 @@ async function flushSaveToSharePoint(){
   if(saveInFlight){ saveQueued = true; return; }
   saveInFlight = true; syncStatus = 'saving'; updateSyncBadge();
   try{
-    await saveDbToSharePointNow(DB);
+    // Extension Management (connection settings + snapshots) is stored in
+    // GitHub (extmgmt-data.json), not SharePoint — see saveExtMgmtToGithub().
+    // Everything else in DB still goes to SharePoint as before.
+    const payload = {...DB, settings:{...DB.settings}};
+    delete payload.settings.extMgmt;
+    delete payload.extSnapshots;
+    await saveDbToSharePointNow(payload);
     syncStatus = 'synced'; lastSyncedAt = new Date().toISOString(); syncError = '';
   }catch(e){
     syncStatus = 'error'; syncError = e.message;
@@ -817,7 +823,10 @@ function genTempPassword(){
 function paint(){
   if(authStage==='login') renderLogin();
   else if(authStage==='changepw') renderChangePassword(pendingChangeForced);
-  else { ensureExtScheduleStarted(); render(); }
+  else {
+    render();
+    loadExtMgmtFromGithub().then(loaded=>{ if(loaded) render(); }).catch(e=>console.warn('Extension Management GitHub load failed:', e.message));
+  }
 }
 function boot(){
   const sid = sessionStorage.getItem(SESSION_KEY);
@@ -1845,18 +1854,30 @@ function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','
 
 /* ======================================================================
    EXTENSION MANAGEMENT COMPARISON
-   Connects to Business Central via an Azure AD app-only (client
-   credentials) registration and the BC Admin Center API, to compare
-   installed extensions across a Production environment and its
-   sandboxes. Runs automatically once a day at 12:00 AM local time
-   (while this app is open in a browser tab — there is no server-side
-   cron here) and keeps a rolling window of snapshots (default 7 days,
-   configurable), pruning anything older. Snapshots are plain data on
-   DB.extSnapshots, so they ride along with the rest of this app's
-   state into the shared SharePoint database file via saveDB(). The
-   Client Secret itself follows the same pattern as the GitHub PAT in
-   the CI/CD tab: kept in this browser tab's sessionStorage only, never
-   written to the synced SharePoint file.
+   Compares installed Business Central extensions across a Production
+   environment and its sandboxes, via either a deployed custom AL API
+   (per-company) or the BC Admin Center API.
+
+   STORAGE — deliberately different from the rest of this app: everything
+   else (Projects, Tickets, Store Customization, Users, general Settings)
+   lives in the shared SharePoint database file. This feature's connection
+   settings + rolling snapshot history instead live in the connected
+   GitHub repo, as extmgmt-data.json (see EXTMGMT_DATA_PATH below) — see
+   loadExtMgmtFromGithub() / saveExtMgmtToGithub(). flushSaveToSharePoint()
+   explicitly excludes settings.extMgmt and extSnapshots so this data never
+   gets duplicated back into SharePoint.
+
+   SYNCING — a browser tab can never successfully call Microsoft's
+   client-credentials token endpoint directly (no CORS support there by
+   design), so "Run Sync Now" doesn't call Business Central itself; it
+   triggers the pushed GitHub Actions workflow via dispatchExtSnapshotWorkflow(),
+   which runs the equivalent logic server-side on GitHub, then commits the
+   result straight into the repo (see the generated scripts/run-extension-
+   snapshot.js and .github/workflows/bc-extension-snapshot.yml). The
+   Client Secret field in this UI follows the same pattern as the GitHub
+   PAT on the CI/CD tab: kept in this browser tab's sessionStorage only,
+   never written anywhere — it's only ever needed as a copy-paste source
+   for the repo's BC_CLIENT_SECRET Actions secret.
    ====================================================================== */
 function bcClientSecret(){ return sessionStorage.getItem('bcovc_bc_secret') || ''; }
 function setBcClientSecret(s){ if(s) sessionStorage.setItem('bcovc_bc_secret', s); else sessionStorage.removeItem('bcovc_bc_secret'); }
@@ -1865,6 +1886,40 @@ function extMgmtSettings(){
     tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:'',
     apiMode:'custom', apiPublisher:'', apiGroup:'', apiVersion:'v2.0',
   });
+}
+const EXTMGMT_DATA_PATH = 'extmgmt-data.json';
+function extMgmtDataRawUrl(){
+  const gh = ghSettings();
+  if(!gh.owner || !gh.repo) return null;
+  // Cache-busted — raw.githubusercontent.com caches aggressively (~5 min),
+  // which would otherwise mask a just-triggered sync's results.
+  return `https://raw.githubusercontent.com/${gh.owner}/${gh.repo}/${gh.branch||'main'}/${EXTMGMT_DATA_PATH}?t=${Date.now()}`;
+}
+// Reads extmgmt-data.json straight from the public repo (no auth needed —
+// this is why it works from the browser at all, unlike SharePoint/BC).
+// Returns true if data was found and merged in, false if the file doesn't
+// exist yet (e.g. nothing has been saved from here before) — in that case
+// whatever's already in memory (e.g. carried over from an older SharePoint
+// copy, pre-migration) is left untouched rather than wiped.
+async function loadExtMgmtFromGithub(){
+  const url = extMgmtDataRawUrl();
+  if(!url) return false;
+  const res = await fetch(url);
+  if(res.status === 404) return false;
+  if(!res.ok) throw new Error(`Could not read Extension Management data from GitHub (HTTP ${res.status}).`);
+  const data = await res.json();
+  DB.settings.extMgmt = Object.assign(extMgmtSettings(), data.settings||{});
+  DB.extSnapshots = data.snapshots||[];
+  return true;
+}
+// Writes connection settings + current snapshots to extmgmt-data.json in
+// the repo (via the GitHub Contents API, using the same PAT as CI/CD —
+// Contents: Read & write is enough, nothing extra needed for this part).
+async function saveExtMgmtToGithub(commitMessage){
+  const gh = ghSettings();
+  if(!gh.owner || !gh.repo || !ghToken()) throw new Error('Connect GitHub on the CI/CD tab first (owner, repo, token with Contents: Read & write).');
+  const payload = { settings: extMgmtSettings(), snapshots: DB.extSnapshots||[] };
+  await githubPutFile(EXTMGMT_DATA_PATH, JSON.stringify(payload, null, 2), commitMessage || `Update Extension Management data (${new Date().toISOString()})`);
 }
 function prodEnv(){ return (extMgmtSettings().environments||[]).find(e=>e.type==='production') || null; }
 function latestSnapshot(){ return DB.extSnapshots.length ? DB.extSnapshots[DB.extSnapshots.length-1] : null; }
@@ -1894,106 +1949,10 @@ function pruneExtSnapshots(){
   const cutoff = Date.now() - days*24*60*60*1000;
   DB.extSnapshots = DB.extSnapshots.filter(s=> new Date(s.timestamp).getTime() >= cutoff);
 }
-async function bcGetToken(){
-  const em = extMgmtSettings();
-  const secret = bcClientSecret();
-  if(!em.tenantId || !em.clientId || !secret) throw new Error('Fill in Tenant ID, Client ID and Client Secret first.');
-  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(em.tenantId)}/oauth2/v2.0/token`, {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:new URLSearchParams({
-      grant_type:'client_credentials',
-      client_id: em.clientId,
-      client_secret: secret,
-      scope:'https://api.businesscentral.dynamics.com/.default',
-    }),
-  });
-  let data = {}; try{ data = await res.json(); }catch(e){}
-  if(!res.ok) throw new Error(data.error_description || `Token request failed (HTTP ${res.status})`);
-  return data.access_token;
-}
-async function bcFetchExtensions(env, token, em){
-  em = em || extMgmtSettings();
-  let url;
-  if(em.apiMode === 'admin'){
-    url = `https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/${encodeURIComponent(env.name)}/extensions`;
-  } else {
-    if(!em.apiPublisher || !em.apiGroup) throw new Error('Set the API Publisher and API Group first (matching what was deployed to Business Central).');
-    if(!env.companyId) throw new Error('This environment is missing a Company ID — required for the custom API.');
-    url = `https://api.businesscentral.dynamics.com/v2.0/${encodeURIComponent(em.tenantId)}/${encodeURIComponent(env.name)}/api/${encodeURIComponent(em.apiPublisher)}/${encodeURIComponent(em.apiGroup)}/${encodeURIComponent(em.apiVersion||'v2.0')}/companies(${env.companyId})/installedExtensions`;
-  }
-  const res = await fetch(url, { headers:{ 'Authorization':`Bearer ${token}` } });
-  let data = {}; try{ data = await res.json(); }catch(e){}
-  if(!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
-  return (data.value||[]).map(e=>({
-    id: e.id || e.appId || e.name,
-    name: e.displayName || e.name || 'Unnamed extension',
-    publisher: e.publisher || '',
-    version: e.version || [e.versionMajor,e.versionMinor,e.versionBuild,e.versionRevision].filter(v=>v!=null).join('.'),
-    state: e.state || (e.installed===false ? 'not installed' : 'installed'),
-  }));
-}
-async function runExtensionSnapshot(manual){
-  const em = extMgmtSettings();
-  if(!em.environments.length){ if(manual) toast('Add at least one environment first.', 'warning'); return; }
-  let token;
-  try{ token = await bcGetToken(); }
-  catch(e){
-    em.lastRunStatus='error'; em.lastRunError=e.message; saveDB();
-    if(manual) toast(`BC connection failed: ${e.message}`, 'danger');
-    render();
-    return;
-  }
-  const results = [];
-  for(const env of em.environments){
-    if(!env.name){ continue; }
-    try{
-      const extensions = await bcFetchExtensions(env, token, em);
-      results.push({envId:env.id, envName:env.name, envLabel:env.label||env.name, envType:env.type, ok:true, extensions});
-    }catch(e){
-      results.push({envId:env.id, envName:env.name, envLabel:env.label||env.name, envType:env.type, ok:false, error:e.message, extensions:[]});
-    }
-  }
-  const snap = {id:uid(), timestamp:new Date().toISOString(), results};
-  DB.extSnapshots.push(snap);
-  pruneExtSnapshots();
-  const anyFailed = results.some(r=>!r.ok);
-  em.lastRunAt = snap.timestamp;
-  em.lastRunStatus = anyFailed ? 'error' : 'success';
-  em.lastRunError = anyFailed ? results.filter(r=>!r.ok).map(r=>`${r.envLabel}: ${r.error}`).join(' | ') : '';
-  saveDB();
-  log('Synced','extmgmt','Extension Management', `Captured ${results.filter(r=>r.ok).length}/${results.length} environment(s)`);
-  toast(anyFailed ? 'Extension snapshot captured with some errors — see connection status.' : 'Extension snapshot captured.', anyFailed?'warning':'success');
-  render();
-}
-// NOTE ON WHY THIS ISN'T AUTO-RUN FROM THE BROWSER:
-// Microsoft's identity platform does not send CORS headers on the
-// client-credentials token endpoint, so a browser tab can never
-// successfully call login.microsoftonline.com/{tenant}/oauth2/v2.0/token
-// directly — it always fails with a generic "Failed to fetch", regardless
-// of how correct the Tenant/Client/Secret values are. This is a platform
-// limitation, not a config bug (confidential-client / secret-based flows
-// are only ever meant to run server-side). runExtensionSnapshot() below is
-// kept for reference/local testing in a non-browser context, but it is
-// deliberately NOT wired up to run automatically here — see
-// dispatchExtSnapshotWorkflow() instead, which triggers the same logic on
-// GitHub's own servers (server-side, so CORS doesn't apply there).
-let extSchedTimer = null, extSchedStarted = false;
-function scheduleExtensionSnapshot(){
-  clearTimeout(extSchedTimer);
-  const now = new Date();
-  const next = new Date(now);
-  next.setHours(24,0,0,0); // next local midnight
-  const ms = next.getTime() - now.getTime();
-  extSchedTimer = setTimeout(()=>{
-    runExtensionSnapshot(false).finally(scheduleExtensionSnapshot);
-  }, ms);
-}
-function ensureExtScheduleStarted(){
-  // Intentionally a no-op — see note above. The real schedule lives in the
-  // GitHub Actions workflow's cron trigger, which actually works.
-  return;
-}
+// bcGetToken/bcFetchExtensions/runExtensionSnapshot/scheduleExtensionSnapshot were removed —
+// direct browser-to-BC calls can never succeed (CORS on the Microsoft identity
+// platform token endpoint), so all syncing runs via dispatchExtSnapshotWorkflow()
+// below, which triggers the equivalent logic on GitHub Actions instead.
 async function dispatchExtSnapshotWorkflow(){
   const gh = ghSettings();
   if(!gh.owner || !gh.repo || !ghToken()) throw new Error('Connect GitHub on the CI/CD tab first (owner, repo, token with Actions: Read & write) and push the snapshot automation.');
@@ -2011,13 +1970,6 @@ async function dispatchExtSnapshotWorkflow(){
     throw new Error(msg);
   }
 }
-async function refreshDbFromSharePoint(){
-  if(IS_LOCAL_DEV) return;
-  const fresh = await loadDbFromSharePoint();
-  if(!fresh) throw new Error('Database file not found on SharePoint yet.');
-  DB = normalizeDB(fresh);
-  render();
-}
 
 function extSnapshotScriptJs(){
   return `/*
@@ -2027,67 +1979,45 @@ function extSnapshotScriptJs(){
  * runExtensionSnapshot in index.html), but from GitHub's own servers on a
  * cron schedule, so it fires whether or not anyone has the app open.
  *
- * Reads its config from the SAME SharePoint database file the app uses
- * (settings.extMgmt.environments / retentionDays), so the environments
- * you configure in the UI are exactly what gets snapshotted here — no
- * separate config to keep in sync.
+ * STORAGE: unlike the rest of this app (Projects, Tickets, Store
+ * Customization, Users, general Settings — all in the shared SharePoint
+ * database file), Extension Management Comparison data lives in THIS
+ * REPO, in extmgmt-data.json at the repo root. That file holds both the
+ * connection settings (tenant/client IDs, environments, company IDs,
+ * retention) and the rolling window of snapshots.
  *
- * TWO SEPARATE APP REGISTRATIONS ARE USED ON PURPOSE:
- *   - one for SharePoint (Microsoft Graph), one for Business Central.
- * This keeps the BC-facing app registration (which other teams may also
- * use/manage) from needing broad tenant-wide SharePoint write access —
- * useful when you aren't the Azure AD admin for that app and don't want
- * to request a permission change on it just for this feature.
+ * Because this workflow already has the repo checked out (actions/checkout),
+ * it reads and writes extmgmt-data.json as a normal local file — no
+ * Microsoft Graph calls, no SharePoint app registration, no extra secrets
+ * beyond the Business Central ones below. The workflow step after this
+ * script runs commits the updated file with git, using the automatic
+ * GITHUB_TOKEN (requires \`permissions: contents: write\` in the workflow).
  *
  * Required repo secrets (Settings > Secrets and variables > Actions):
- *   SP_CLIENT_ID       Azure AD app registration (client) ID — SharePoint only
- *   SP_CLIENT_SECRET   Client secret value for that app registration
- *   SP_TENANT_ID       (optional) Azure AD tenant ID for the SharePoint app,
- *                      if different from BC_TENANT_ID — otherwise omit and
- *                      BC_TENANT_ID is reused
  *   BC_TENANT_ID       Azure AD tenant (directory) ID
  *   BC_CLIENT_ID       Azure AD app registration (client) ID — Business Central only
  *   BC_CLIENT_SECRET   Client secret value for that app registration
  *
- * Permissions needed on each:
- *   SP_CLIENT_ID  → Microsoft Graph > Application > Sites.ReadWrite.All (admin-consented)
- *   BC_CLIENT_ID  → Business Central API access — either:
- *       (a) Custom API mode (default): normal BC user permissions in each
- *           environment for the deployed AL extension's API (publisher/
- *           group/version and each environment's Company ID come from
- *           settings.extMgmt in the database file itself), or
- *       (b) Admin Center API mode: BC Admin Center / Global Admin role,
- *           if settings.extMgmt.apiMode is set to "admin"
- *
- * Optional repo variables (Settings > Secrets and variables > Actions > Variables)
- * override where the database file lives; defaults match the values baked
- * into index.html:
- *   SP_HOSTNAME     default: healthyoptionsph.sharepoint.com
- *   SP_SITE_PATH    default: /sites/IT-SP
- *   SP_FOLDER_PATH  default: IT Team Folder/27 BC_LS/DevEnvironment/BC Object and Version Control Monitoring
- *   SP_FILE_NAME    default: bcovc-database.json
+ * That app registration needs Business Central API access — either:
+ *   (a) Custom API mode (default): normal BC user permissions in each
+ *       environment for the deployed AL extension's API (publisher/
+ *       group/version and each environment's Company ID come from
+ *       extmgmt-data.json itself), or
+ *   (b) Admin Center API mode: BC Admin Center / Global Admin role,
+ *       if settings.apiMode is set to "admin" in extmgmt-data.json
  */
 
 const BC_TENANT_ID = process.env.BC_TENANT_ID;
 const BC_CLIENT_ID = process.env.BC_CLIENT_ID;
 const BC_CLIENT_SECRET = process.env.BC_CLIENT_SECRET;
 
-const SP_TENANT_ID = process.env.SP_TENANT_ID || BC_TENANT_ID;
-const SP_CLIENT_ID = process.env.SP_CLIENT_ID;
-const SP_CLIENT_SECRET = process.env.SP_CLIENT_SECRET;
-
-const SP_HOSTNAME = process.env.SP_HOSTNAME || 'healthyoptionsph.sharepoint.com';
-const SP_SITE_PATH = process.env.SP_SITE_PATH || '/sites/IT-SP';
-const SP_FOLDER_PATH = process.env.SP_FOLDER_PATH || 'IT Team Folder/27 BC_LS/DevEnvironment/BC Object and Version Control Monitoring';
-const SP_FILE_NAME = process.env.SP_FILE_NAME || 'bcovc-database.json';
+const fs = require('fs');
+const path = require('path');
+const DATA_FILE = path.join(process.cwd(), 'extmgmt-data.json');
 
 function fail(msg) {
   console.error(\`::error::\${msg}\`);
   process.exit(1);
-}
-
-function encodeGraphPath(path) {
-  return path.split('/').map(encodeURIComponent).join('/');
 }
 
 async function getToken(tenantId, clientId, clientSecret, scope) {
@@ -2106,46 +2036,14 @@ async function getToken(tenantId, clientId, clientSecret, scope) {
   return data.access_token;
 }
 
-async function graphFetch(graphToken, path, options) {
-  options = options || {};
-  const res = await fetch(\`https://graph.microsoft.com/v1.0\${path}\`, {
-    ...options,
-    headers: { Authorization: \`Bearer \${graphToken}\`, ...(options.headers || {}) },
-  });
-  return res;
-}
-
-async function getSiteId(graphToken) {
-  const res = await graphFetch(graphToken, \`/sites/\${SP_HOSTNAME}:\${SP_SITE_PATH}\`);
-  if (!res.ok) throw new Error(\`Could not reach the SharePoint site (HTTP \${res.status}).\`);
-  const data = await res.json();
-  return data.id;
-}
-
-async function loadDb(graphToken, siteId) {
-  const res = await graphFetch(graphToken, \`/sites/\${siteId}/drive/root:/\${encodeGraphPath(SP_FOLDER_PATH)}/\${SP_FILE_NAME}:/content\`);
-  if (res.status === 404) throw new Error('Database file not found in SharePoint yet — open the app once first so it can create it.');
-  if (!res.ok) throw new Error(\`Could not read the database file (HTTP \${res.status}).\`);
-  return res.json();
-}
-
-async function saveDb(graphToken, siteId, db) {
-  const res = await graphFetch(graphToken, \`/sites/\${siteId}/drive/root:/\${encodeGraphPath(SP_FOLDER_PATH)}/\${SP_FILE_NAME}:/content\`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(db),
-  });
-  if (!res.ok) throw new Error(\`Could not write the database file (HTTP \${res.status}).\`);
-}
-
-async function fetchBcExtensions(bcToken, env, em) {
+async function fetchBcExtensions(bcToken, env, settings) {
   let url;
-  if (em.apiMode === 'admin') {
+  if (settings.apiMode === 'admin') {
     url = \`https://api.businesscentral.dynamics.com/admin/v2.18/applications/businesscentral/environments/\${encodeURIComponent(env.name)}/extensions\`;
   } else {
-    if (!em.apiPublisher || !em.apiGroup) throw new Error('Missing API Publisher/Group in settings.extMgmt for custom API mode.');
+    if (!settings.apiPublisher || !settings.apiGroup) throw new Error('Missing API Publisher/Group in extmgmt-data.json for custom API mode.');
     if (!env.companyId) throw new Error('Missing Company ID for this environment (required for custom API mode).');
-    url = \`https://api.businesscentral.dynamics.com/v2.0/\${encodeURIComponent(em.tenantId)}/\${encodeURIComponent(env.name)}/api/\${encodeURIComponent(em.apiPublisher)}/\${encodeURIComponent(em.apiGroup)}/\${encodeURIComponent(em.apiVersion || 'v2.0')}/companies(\${env.companyId})/installedExtensions\`;
+    url = \`https://api.businesscentral.dynamics.com/v2.0/\${encodeURIComponent(settings.tenantId)}/\${encodeURIComponent(env.name)}/api/\${encodeURIComponent(settings.apiPublisher)}/\${encodeURIComponent(settings.apiGroup)}/\${encodeURIComponent(settings.apiVersion || 'v2.0')}/companies(\${env.companyId})/installedExtensions\`;
   }
   const res = await fetch(url, {
     headers: { Authorization: \`Bearer \${bcToken}\` },
@@ -2165,43 +2063,46 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-function pruneSnapshots(db) {
-  const days = (db.settings.extMgmt && db.settings.extMgmt.retentionDays) || 7;
+function loadData() {
+  if (!fs.existsSync(DATA_FILE)) {
+    fail('extmgmt-data.json not found in the repo yet — save the connection once from the app (Settings > Extension Management) so it can be created first.');
+  }
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+}
+
+function saveData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2) + '\\n', 'utf8');
+}
+
+function pruneSnapshots(data) {
+  const days = (data.settings && data.settings.retentionDays) || 7;
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  db.extSnapshots = (db.extSnapshots || []).filter((s) => new Date(s.timestamp).getTime() >= cutoff);
+  data.snapshots = (data.snapshots || []).filter((s) => new Date(s.timestamp).getTime() >= cutoff);
 }
 
 async function main() {
-  if (!SP_CLIENT_ID || !SP_CLIENT_SECRET || !SP_TENANT_ID) {
-    fail('Missing SP_CLIENT_ID / SP_CLIENT_SECRET (or BC_TENANT_ID as a fallback for SP_TENANT_ID) repo secrets — this is the dedicated SharePoint-only app registration.');
-  }
   if (!BC_TENANT_ID || !BC_CLIENT_ID || !BC_CLIENT_SECRET) {
     fail('Missing BC_TENANT_ID / BC_CLIENT_ID / BC_CLIENT_SECRET repo secrets.');
   }
 
-  console.log('Requesting Microsoft Graph token (SharePoint app registration)...');
-  const graphToken = await getToken(SP_TENANT_ID, SP_CLIENT_ID, SP_CLIENT_SECRET, 'https://graph.microsoft.com/.default');
-  const siteId = await getSiteId(graphToken);
+  console.log('Reading extmgmt-data.json from the repo...');
+  const data = loadData();
+  data.settings = data.settings || {};
+  data.snapshots = data.snapshots || [];
 
-  console.log('Loading database from SharePoint...');
-  const db = await loadDb(graphToken, siteId);
-  db.settings = db.settings || {};
-  db.settings.extMgmt = db.settings.extMgmt || { environments: [], retentionDays: 7 };
-  db.extSnapshots = db.extSnapshots || [];
-
-  const environments = (db.settings.extMgmt.environments || []).filter((e) => e.name);
+  const environments = (data.settings.environments || []).filter((e) => e.name);
   if (!environments.length) {
-    fail('No environments configured. Add at least one environment in the app\\'s Extension Management Comparison tab first.');
+    fail('No environments configured. Add at least one environment in the app\\'s Settings > Extension Management page first.');
   }
 
-  console.log('Requesting Business Central token (BC app registration)...');
+  console.log('Requesting Business Central token...');
   const bcToken = await getToken(BC_TENANT_ID, BC_CLIENT_ID, BC_CLIENT_SECRET, 'https://api.businesscentral.dynamics.com/.default');
 
   const results = [];
   for (const env of environments) {
     console.log(\`Fetching extensions for \${env.label || env.name}...\`);
     try {
-      const extensions = await fetchBcExtensions(bcToken, env, db.settings.extMgmt);
+      const extensions = await fetchBcExtensions(bcToken, env, data.settings);
       results.push({ envId: env.id, envName: env.name, envLabel: env.label || env.name, envType: env.type, ok: true, extensions });
     } catch (e) {
       console.warn(\`  failed: \${e.message}\`);
@@ -2210,32 +2111,22 @@ async function main() {
   }
 
   const snapshot = { id: uid(), timestamp: new Date().toISOString(), results };
-  db.extSnapshots.push(snapshot);
-  pruneSnapshots(db);
+  data.snapshots.push(snapshot);
+  pruneSnapshots(data);
 
   const anyFailed = results.some((r) => !r.ok);
-  db.settings.extMgmt.lastRunAt = snapshot.timestamp;
-  db.settings.extMgmt.lastRunStatus = anyFailed ? 'error' : 'success';
-  db.settings.extMgmt.lastRunError = anyFailed
+  data.settings.lastRunAt = snapshot.timestamp;
+  data.settings.lastRunStatus = anyFailed ? 'error' : 'success';
+  data.settings.lastRunError = anyFailed
     ? results.filter((r) => !r.ok).map((r) => \`\${r.envLabel}: \${r.error}\`).join(' | ')
     : '';
 
-  db.logs = db.logs || [];
-  db.logs.unshift({
-    id: uid(),
-    timestamp: new Date().toISOString(),
-    user: 'GitHub Actions',
-    action: 'Synced',
-    entity: 'extmgmt',
-    entityName: 'Extension Management',
-    details: \`Captured \${results.filter((r) => r.ok).length}/\${results.length} environment(s) (scheduled run)\`,
-  });
+  console.log('Writing extmgmt-data.json...');
+  saveData(data);
 
-  console.log('Saving database back to SharePoint...');
-  await saveDb(graphToken, siteId, db);
-
-  console.log(anyFailed ? 'Done, with some environment errors — see settings.extMgmt.lastRunError.' : 'Done.');
-  if (anyFailed) process.exitCode = 1; // mark the Action run as failed so it's visible, without blocking the snapshot that did save
+  console.log(\`Captured \${results.filter((r) => r.ok).length}/\${results.length} environment(s).\`);
+  console.log(anyFailed ? 'Done, with some environment errors — see settings.lastRunError.' : 'Done.');
+  if (anyFailed) process.exitCode = 1; // marks the Action run visibly failed, without blocking the commit step that saves what did succeed
 }
 
 main().catch((e) => fail(e.message || String(e)));
@@ -2252,6 +2143,9 @@ on:
     - cron: '0 16 * * *'
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   snapshot:
     runs-on: ubuntu-latest
@@ -2267,14 +2161,16 @@ jobs:
           BC_TENANT_ID: \${{ secrets.BC_TENANT_ID }}
           BC_CLIENT_ID: \${{ secrets.BC_CLIENT_ID }}
           BC_CLIENT_SECRET: \${{ secrets.BC_CLIENT_SECRET }}
-          SP_TENANT_ID: \${{ secrets.SP_TENANT_ID }}
-          SP_CLIENT_ID: \${{ secrets.SP_CLIENT_ID }}
-          SP_CLIENT_SECRET: \${{ secrets.SP_CLIENT_SECRET }}
-          SP_HOSTNAME: \${{ vars.SP_HOSTNAME }}
-          SP_SITE_PATH: \${{ vars.SP_SITE_PATH }}
-          SP_FOLDER_PATH: \${{ vars.SP_FOLDER_PATH }}
-          SP_FILE_NAME: \${{ vars.SP_FILE_NAME }}
         run: node scripts/run-extension-snapshot.js
+
+      - name: Commit updated snapshot data
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extmgmt-data.json 2>/dev/null || { echo "extmgmt-data.json not present — nothing to commit."; exit 0; }
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "Extension snapshot ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push
 `;
 }
 
@@ -2317,7 +2213,7 @@ function viewExtMgmt(){
       <br>Connection, environments and the GitHub Actions schedule are managed in <b>Settings &rsaquo; Extension Management</b>.
     </div>
     ${can('setup','view')?`<button class="btn btn-ghost" id="goToExtSettings">${icon('settings')} Go to Settings</button>`:''}
-    <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from SharePoint</button>
+    <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from GitHub</button>
   </div>
 
   <div class="tabs">
@@ -2368,25 +2264,25 @@ function settingsExtMgmt(){
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveBcConnection">Save Connection</button>`:''}
       <button class="btn btn-primary" id="runBcSyncNow" ${syncReady?'':'disabled'} title="${syncReady?'':'Connect GitHub on the CI/CD tab and add at least one environment first'}">${icon('upload')} Run Sync Now (via GitHub Actions)</button>
-      <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from SharePoint</button>
+      <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from GitHub</button>
     </div>
     <div style="margin-top:10px;font-size:12px;color:var(--text-faint);">
       ${em.lastRunAt
         ? `Last sync: ${timeAgo(em.lastRunAt)} — ${em.lastRunStatus==='error'?`<span style="color:var(--danger);">issues: ${escapeHtml(em.lastRunError||'')}</span>`:'<span style="color:var(--success);">success</span>'}`
         : 'No sync has run yet.'}
-      <br>Triggering a run doesn't finish instantly — GitHub usually takes under a minute. Click <b>Refresh from SharePoint</b> after that (or reload the page) to pull in the result without waiting for the next auto-save.
+      <br>Triggering a run doesn't finish instantly — GitHub usually takes under a minute. Click <b>Refresh from GitHub</b> after that (or reload the page) to pull in the result.
 
     </div>
   </div>
 
   <div class="card" style="margin-bottom:18px;">
     <div class="section-title"><h3>${icon('cicd')} Automate with GitHub Actions</h3><span class="hint">Runs on GitHub's own servers, on schedule — works even if this app is never opened</span></div>
-    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). The scheduled job reads the connection method, environments, and companies straight from this app's SharePoint database file, calls Business Central, and writes the new snapshot back to that same file — no separate config to keep in sync. It uses <b>two separate Azure AD app registrations</b> on purpose: one for Business Central, one just for SharePoint — so the BC-facing registration (which other teams may also use) never needs broad tenant-wide SharePoint access.</p>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Pushes a workflow + script into <span class="mono">${gh.owner&&gh.repo?`${escapeHtml(gh.owner)}/${escapeHtml(gh.repo)}`:'your connected repo'}</span> (set up on the <b>CI/CD</b> tab — a dedicated connection, separate from the Ticket/Store Customization repo links). Unlike the rest of this app, Extension Management's connection settings and snapshots live <b>in this repo</b> (<span class="mono">${EXTMGMT_DATA_PATH}</span>) rather than in the shared SharePoint database — Projects, Tickets, Store Customization, Users, and the rest of Settings are unaffected and stay in SharePoint exactly as before. Since it's just a file in the repo, the scheduled job only needs Business Central credentials — no Microsoft Graph calls, no SharePoint app registration, no admin dependency for that part.</p>
     <ol style="font-size:12.5px;color:var(--text-dim);line-height:1.8;padding-left:20px;margin-bottom:14px;">
       <li>Connect a repo on the <b>CI/CD</b> tab first (owner, repo, branch, token with Contents + Workflows + Actions: Read &amp; write) — this is a separate connection from the Ticket/Store Customization repo links on the Repositories tab. The <b>Actions</b> permission is what lets the "Run Sync Now" button trigger a run on demand.</li>
+      <li>Save the connection details and at least one environment below — this creates <span class="mono">${EXTMGMT_DATA_PATH}</span> in the repo for the first time</li>
       <li>Click <b>Push Snapshot Automation to GitHub</b> below</li>
-      <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add the <b>Business Central</b> secrets: <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above. ${isCustom?'Grant that app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set).':'Grant that app registration Business Central Admin Center API access (Global Admin / BC Admin role).'}</li>
-      <li>Add a <b>second, dedicated</b> app registration just for SharePoint — ideal if you're not the Azure AD admin for the BC app registration and don't want to request wider permissions on it. Add its secrets: <span class="mono">SP_CLIENT_ID</span>, <span class="mono">SP_CLIENT_SECRET</span>, and (only if it's in a different tenant) <span class="mono">SP_TENANT_ID</span>. Have an admin grant it Microsoft Graph <b>Application</b> permission <span class="mono">Sites.ReadWrite.All</span>, admin-consented — that's the only permission it needs.</li>
+      <li>In the repo's <span class="mono">Settings &gt; Secrets and variables &gt; Actions</span>, add the Business Central secrets: <span class="mono">BC_TENANT_ID</span>, <span class="mono">BC_CLIENT_ID</span>, <span class="mono">BC_CLIENT_SECRET</span> — the same values entered above. ${isCustom?'Grant that app registration access to the deployed AL extension\'s API in each environment (normal BC user permissions — see the AL extension\'s permission set).':'Grant that app registration Business Central Admin Center API access (Global Admin / BC Admin role).'} No other secrets or app registrations are needed.</li>
       <li>The workflow runs daily at 16:00 UTC (12:00 AM Philippine Time) — edit the cron line directly in GitHub if a different timezone applies, since GitHub Actions schedules don't adjust for local time or DST</li>
     </ol>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -3113,7 +3009,7 @@ function attachContentHandlers(){
     el.addEventListener('click', ()=>{ state.extmgmtTab = el.dataset.exttab; render(); });
   });
   const saveBcConnection = document.getElementById('saveBcConnection');
-  if(saveBcConnection) saveBcConnection.addEventListener('click', ()=>{
+  if(saveBcConnection) saveBcConnection.addEventListener('click', async ()=>{
     const em = extMgmtSettings();
     em.tenantId = document.getElementById('bcTenantId').value.trim();
     em.clientId = document.getElementById('bcClientId').value.trim();
@@ -3125,9 +3021,16 @@ function attachContentHandlers(){
     if(verEl) em.apiVersion = verEl.value.trim() || 'v2.0';
     setBcClientSecret(document.getElementById('bcClientSecret').value.trim());
     pruneExtSnapshots();
-    saveDB();
-    log('Updated','settings','BC connection (tenant/client — secret kept out of the synced file)');
-    toast('Connection saved.', 'success');
+    const original = saveBcConnection.textContent;
+    saveBcConnection.disabled = true; saveBcConnection.textContent = 'Saving…';
+    try{
+      await saveExtMgmtToGithub(`Update BC connection settings (${new Date().toISOString()})`);
+      log('Updated','github', EXTMGMT_DATA_PATH, 'BC connection (tenant/client — secret kept out of the repo too)');
+      toast('Connection saved to GitHub.', 'success');
+    }catch(err){
+      toast(`Could not save to GitHub: ${err.message}`, 'danger');
+    }
+    saveBcConnection.disabled = false; saveBcConnection.textContent = original;
     render();
   });
   const bcApiMode = document.getElementById('bcApiMode');
@@ -3138,7 +3041,7 @@ function attachContentHandlers(){
     runBcSyncNow.disabled = true; runBcSyncNow.textContent = 'Triggering…';
     try{
       await dispatchExtSnapshotWorkflow();
-      toast('Triggered on GitHub Actions — usually finishes in under a minute. Use "Refresh from SharePoint" shortly to see the result.', 'success');
+      toast('Triggered on GitHub Actions — usually finishes in under a minute. Use "Refresh from GitHub" shortly to see the result.', 'success');
     }catch(err){
       toast(`Could not trigger sync: ${err.message}`, 'danger');
     }
@@ -3149,21 +3052,24 @@ function attachContentHandlers(){
     const original = refreshExtDb.textContent;
     refreshExtDb.disabled = true; refreshExtDb.textContent = 'Refreshing…';
     try{
-      await refreshDbFromSharePoint();
-      toast('Refreshed from SharePoint.', 'success');
+      const loaded = await loadExtMgmtFromGithub();
+      toast(loaded ? 'Refreshed from GitHub.' : 'Nothing saved to GitHub yet — click Save Connection first.', loaded?'success':'warning');
     }catch(err){
       toast(`Refresh failed: ${err.message}`, 'danger');
-      refreshExtDb.disabled = false; refreshExtDb.textContent = original;
     }
+    refreshExtDb.disabled = false; refreshExtDb.textContent = original;
+    render();
   });
   const addBcEnv = document.getElementById('addBcEnv');
-  if(addBcEnv) addBcEnv.addEventListener('click', ()=>{
+  if(addBcEnv) addBcEnv.addEventListener('click', async ()=>{
     const em = extMgmtSettings();
     em.environments.push({id:uid(), name:'', label:'', companyId:'', type: em.environments.some(e=>e.type==='production') ? 'sandbox' : 'production'});
-    saveDB(); render();
+    render();
+    try{ await saveExtMgmtToGithub(`Add environment row (${new Date().toISOString()})`); }
+    catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
   });
   const saveBcEnvs = document.getElementById('saveBcEnvs');
-  if(saveBcEnvs) saveBcEnvs.addEventListener('click', ()=>{
+  if(saveBcEnvs) saveBcEnvs.addEventListener('click', async ()=>{
     document.querySelectorAll('#bcEnvRows tr[data-envid]').forEach(row=>{
       const env = (extMgmtSettings().environments||[]).find(e=>e.id===row.dataset.envid);
       if(!env) return;
@@ -3173,16 +3079,25 @@ function attachContentHandlers(){
       const companyEl = row.querySelector('.env-companyid');
       if(companyEl) env.companyId = companyEl.value.trim();
     });
-    saveDB();
-    log('Updated','settings','Extension Management environments');
-    toast('Environments saved.', 'success');
+    const original = saveBcEnvs.textContent;
+    saveBcEnvs.disabled = true; saveBcEnvs.textContent = 'Saving…';
+    try{
+      await saveExtMgmtToGithub(`Update environments (${new Date().toISOString()})`);
+      log('Updated','github', EXTMGMT_DATA_PATH, 'Extension Management environments');
+      toast('Environments saved to GitHub.', 'success');
+    }catch(err){
+      toast(`Could not save to GitHub: ${err.message}`, 'danger');
+    }
+    saveBcEnvs.disabled = false; saveBcEnvs.textContent = original;
     render();
   });
   document.querySelectorAll('[data-delenv]').forEach(el=>{
-    el.addEventListener('click', ()=>{
+    el.addEventListener('click', async ()=>{
       const em = extMgmtSettings();
       em.environments = em.environments.filter(e=>e.id!==el.dataset.delenv);
-      saveDB(); toast('Environment removed.', 'danger'); render();
+      render();
+      try{ await saveExtMgmtToGithub(`Remove environment (${new Date().toISOString()})`); toast('Environment removed.', 'danger'); }
+      catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
     });
   });
   const pushExtSnapshotGh = document.getElementById('pushExtSnapshotGh');
