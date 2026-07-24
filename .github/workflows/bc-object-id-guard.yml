@@ -1,0 +1,26 @@
+name: BC Object ID Guard
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-object-ids:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current manifest
+        run: curl -sL "${{ secrets.MANIFEST_URL }}" -o manifest.json
+
+      - name: Check for object ID collisions
+        run: |
+          node scripts/validate-object-ids.js \
+            --manifest manifest.json \
+            --app-source ./src
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"text":"Object ID collision detected in PR #${{ github.event.number }}"}'
