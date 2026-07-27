@@ -1936,7 +1936,22 @@ async function loadExtMgmtFromGithub(){
 // a snapshot the Action committed moments earlier. Only the fields the
 // person actually edits here (tenantId, clientId, environments, apiMode,
 // apiPublisher, apiGroup, apiVersion, retentionDays) take the local value.
-async function saveExtMgmtToGithub(commitMessage){
+//
+// Calls are serialized through extMgmtSaveChain: several UI actions can
+// each trigger a save in quick succession (e.g. clicking "Add Environment"
+// kicks one off in the background, then "Save Environments" moments later
+// starts another) — without serialization these would race each other's
+// read-merge-write cycle and intermittently fail with a sha conflict, or
+// silently overwrite one another. Chaining them ensures each save only
+// starts once the previous one has fully finished.
+let extMgmtSaveChain = Promise.resolve();
+function saveExtMgmtToGithub(commitMessage){
+  const run = ()=> saveExtMgmtToGithubImpl(commitMessage);
+  const next = extMgmtSaveChain.then(run, run); // run regardless of the previous save's outcome
+  extMgmtSaveChain = next.catch(()=>{}); // never let one failure poison the chain for later saves
+  return next;
+}
+async function saveExtMgmtToGithubImpl(commitMessage){
   const gh = ghSettings();
   if(!gh.owner || !gh.repo || !ghToken()) throw new Error('Connect GitHub on the CI/CD tab first (owner, repo, token with Contents: Read & write).');
   const local = {...extMgmtSettings()};
