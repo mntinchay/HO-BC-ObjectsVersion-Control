@@ -19,10 +19,10 @@
       },
       {
         "id": "pg3m4pl5eg6h",
-        "name": "",
-        "label": "",
-        "companyId": "",
-        "type": "production"
+        "name": "Test_D260320",
+        "label": "Test_D260320",
+        "companyId": "0ab67702-3f46-ee11-b18d-b6f29f9adee5",
+        "type": "sandbox"
       }
     ],
     "retentionDays": 7,
