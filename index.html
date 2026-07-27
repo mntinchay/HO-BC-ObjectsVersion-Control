@@ -1757,7 +1757,8 @@ async function githubApi(path, options){
   if(!res.ok){ const msg = (body&&body.message) ? body.message : `GitHub API error (${res.status})`; throw new Error(msg); }
   return body;
 }
-async function githubPutFile(filePath, contentStr, commitMessage){
+async function githubPutFile(filePath, contentStr, commitMessage, _attempt){
+  _attempt = _attempt || 1;
   const gh = ghSettings();
   if(!gh.owner || !gh.repo || !ghToken()){ throw new Error('Fill in owner, repo and token first.'); }
   let sha;
@@ -1765,11 +1766,23 @@ async function githubPutFile(filePath, contentStr, commitMessage){
     const existing = await githubApi(`/contents/${encodeURIComponent(filePath).replace(/%2F/g,'/')}?ref=${encodeURIComponent(gh.branch||'main')}`, {method:'GET'});
     sha = existing && existing.sha;
   }catch(e){ /* file probably doesn't exist yet — that's fine, create it */ }
-  return githubApi(`/contents/${encodeURIComponent(filePath).replace(/%2F/g,'/')}`, {
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ message: commitMessage, content: b64EncodeUtf8(contentStr), branch: gh.branch||'main', ...(sha?{sha}:{}) })
-  });
+  try{
+    return await githubApi(`/contents/${encodeURIComponent(filePath).replace(/%2F/g,'/')}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ message: commitMessage, content: b64EncodeUtf8(contentStr), branch: gh.branch||'main', ...(sha?{sha}:{}) })
+    });
+  }catch(err){
+    // "X does not match <sha>" means the file changed between our GET and
+    // this PUT (e.g. a GitHub Actions commit landed in between, or two
+    // saves overlapped) — the sha we sent is already stale. Re-fetch the
+    // now-current sha and retry a couple of times before giving up.
+    if(/does not match/i.test(err.message) && _attempt < 4){
+      await new Promise(r=>setTimeout(r, 400*_attempt));
+      return githubPutFile(filePath, contentStr, commitMessage, _attempt+1);
+    }
+    throw err;
+  }
 }
 async function pushManifestToGithub(){
   ghStatus('Pushing manifest…');
@@ -1915,10 +1928,32 @@ async function loadExtMgmtFromGithub(){
 // Writes connection settings + current snapshots to extmgmt-data.json in
 // the repo (via the GitHub Contents API, using the same PAT as CI/CD —
 // Contents: Read & write is enough, nothing extra needed for this part).
+//
+// Re-reads the file immediately before writing and keeps its snapshots /
+// lastRunAt / lastRunStatus / lastRunError as the source of truth — those
+// fields are effectively "owned" by GitHub Actions, so a settings-only
+// save from the browser (e.g. editing an environment) can never overwrite
+// a snapshot the Action committed moments earlier. Only the fields the
+// person actually edits here (tenantId, clientId, environments, apiMode,
+// apiPublisher, apiGroup, apiVersion, retentionDays) take the local value.
 async function saveExtMgmtToGithub(commitMessage){
   const gh = ghSettings();
   if(!gh.owner || !gh.repo || !ghToken()) throw new Error('Connect GitHub on the CI/CD tab first (owner, repo, token with Contents: Read & write).');
-  const payload = { settings: extMgmtSettings(), snapshots: DB.extSnapshots||[] };
+  const local = {...extMgmtSettings()};
+  let remoteSettings = {}, remoteSnapshots = [];
+  try{
+    const remote = await loadExtMgmtFromGithub();
+    if(remote){ remoteSettings = extMgmtSettings(); remoteSnapshots = DB.extSnapshots||[]; }
+  }catch(e){ /* no remote copy yet, or unreachable — proceed with local-only data */ }
+  const merged = {
+    ...remoteSettings,
+    tenantId: local.tenantId, clientId: local.clientId, environments: local.environments,
+    apiMode: local.apiMode, apiPublisher: local.apiPublisher, apiGroup: local.apiGroup,
+    apiVersion: local.apiVersion, retentionDays: local.retentionDays,
+  };
+  DB.settings.extMgmt = merged;
+  DB.extSnapshots = remoteSnapshots;
+  const payload = { settings: merged, snapshots: remoteSnapshots };
   await githubPutFile(EXTMGMT_DATA_PATH, JSON.stringify(payload, null, 2), commitMessage || `Update Extension Management data (${new Date().toISOString()})`);
 }
 function prodEnv(){ return (extMgmtSettings().environments||[]).find(e=>e.type==='production') || null; }
