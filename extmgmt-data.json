@@ -16,6 +16,13 @@
         "label": "Test",
         "companyId": "0ab67702-3f46-ee11-b18d-b6f29f9adee5",
         "type": "sandbox"
+      },
+      {
+        "id": "pg3m4pl5eg6h",
+        "name": "",
+        "label": "",
+        "companyId": "",
+        "type": "production"
       }
     ],
     "retentionDays": 7,
