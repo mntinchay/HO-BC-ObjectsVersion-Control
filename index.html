@@ -2990,6 +2990,8 @@ function attachContentHandlers(){
     toast('Manifest downloaded.', 'success');
   });
 
+  const ghTokenInput = document.getElementById('ghToken');
+  if(ghTokenInput) ghTokenInput.addEventListener('input', ()=>{ setGhToken(ghTokenInput.value.trim()); });
   const saveGithubSettings = document.getElementById('saveGithubSettings');
   if(saveGithubSettings) saveGithubSettings.addEventListener('click', ()=>{
     const gh = ghSettings();
