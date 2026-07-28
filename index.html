@@ -1680,8 +1680,13 @@ function viewLogs(){
 }
 
 /* ---------------------------- CI/CD VIEW ---------------------------- */
-function ghToken(){ return sessionStorage.getItem('bcovc_gh_token') || ''; }
-function setGhToken(t){ if(t) sessionStorage.setItem('bcovc_gh_token', t); else sessionStorage.removeItem('bcovc_gh_token'); }
+function ghTokenRemember(){ return localStorage.getItem('bcovc_gh_token_remember') === '1'; }
+function setGhTokenRemember(v){ if(v) localStorage.setItem('bcovc_gh_token_remember','1'); else { localStorage.removeItem('bcovc_gh_token_remember'); localStorage.removeItem('bcovc_gh_token'); } }
+function ghToken(){ return sessionStorage.getItem('bcovc_gh_token') || (ghTokenRemember() ? (localStorage.getItem('bcovc_gh_token')||'') : ''); }
+function setGhToken(t){
+  if(t){ sessionStorage.setItem('bcovc_gh_token', t); if(ghTokenRemember()) localStorage.setItem('bcovc_gh_token', t); }
+  else { sessionStorage.removeItem('bcovc_gh_token'); localStorage.removeItem('bcovc_gh_token'); }
+}
 function viewCicd(){
   const manifestPreview = JSON.stringify(buildManifest(), null, 2).slice(0,900);
   const gh = DB.settings.github || {owner:'',repo:'',branch:'main',manifestPath:'bc-object-manifest.json'};
@@ -1701,7 +1706,11 @@ function viewCicd(){
     <div class="form-row">
       <label>Personal Access Token <span class="hint">(fine-grained, Contents + Workflows + Actions: Read &amp; write, scoped to this repo only)</span></label>
       <input type="password" id="ghToken" placeholder="github_pat_..." value="${escapeAttr(token)}" ${canEdit?'':'disabled'}>
-      <span class="hint">Kept in this browser tab's session storage only — cleared when the tab closes, and never written to the shared SharePoint database file. Re-enter it each session; use a token scoped to just this one repo.</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;margin-top:4px;">
+        <input type="checkbox" id="ghTokenRemember" ${ghTokenRemember()?'checked':''} ${canEdit?'':'disabled'}>
+        Remember on this device
+      </label>
+      <span class="hint">By default this clears when the tab closes and is never written to the shared SharePoint database file — re-paste it each session. Checking "Remember on this device" keeps it in this browser's local storage instead, so it survives closing the tab; it still never leaves this device or gets written to SharePoint/GitHub, but anyone else using this same browser profile would also have it, so only enable it on a machine you don't share.</span>
       <span class="hint">Needs <b>Contents: Read &amp; write</b> (push files), <b>Workflows: Read &amp; write</b> (write under <span class="mono">.github/workflows/</span>), and <b>Actions: Read &amp; write</b> (lets Extension Management's "Run Sync Now" trigger a workflow run on demand).</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
@@ -1892,8 +1901,13 @@ function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','
    never written anywhere — it's only ever needed as a copy-paste source
    for the repo's BC_CLIENT_SECRET Actions secret.
    ====================================================================== */
-function bcClientSecret(){ return sessionStorage.getItem('bcovc_bc_secret') || ''; }
-function setBcClientSecret(s){ if(s) sessionStorage.setItem('bcovc_bc_secret', s); else sessionStorage.removeItem('bcovc_bc_secret'); }
+function bcSecretRemember(){ return localStorage.getItem('bcovc_bc_secret_remember') === '1'; }
+function setBcSecretRemember(v){ if(v) localStorage.setItem('bcovc_bc_secret_remember','1'); else { localStorage.removeItem('bcovc_bc_secret_remember'); localStorage.removeItem('bcovc_bc_secret'); } }
+function bcClientSecret(){ return sessionStorage.getItem('bcovc_bc_secret') || (bcSecretRemember() ? (localStorage.getItem('bcovc_bc_secret')||'') : ''); }
+function setBcClientSecret(s){
+  if(s){ sessionStorage.setItem('bcovc_bc_secret', s); if(bcSecretRemember()) localStorage.setItem('bcovc_bc_secret', s); }
+  else { sessionStorage.removeItem('bcovc_bc_secret'); localStorage.removeItem('bcovc_bc_secret'); }
+}
 function extMgmtSettings(){
   return DB.settings.extMgmt || (DB.settings.extMgmt = {
     tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:'',
@@ -2309,7 +2323,11 @@ function settingsExtMgmt(){
     <div class="form-row">
       <label>Client Secret <span class="hint">(app registration client secret value)</span></label>
       <input type="password" id="bcClientSecret" placeholder="Secret value..." value="${escapeAttr(secret)}" ${canEdit?'':'disabled'}>
-      <span class="hint">Kept in this browser tab's session storage only, same as the GitHub token — never written to the shared SharePoint database file. You'll also paste this same value into the repo's <span class="mono">BC_CLIENT_SECRET</span> GitHub Actions secret, since that's where it's actually used.</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;margin-top:4px;">
+        <input type="checkbox" id="bcSecretRemember" ${bcSecretRemember()?'checked':''} ${canEdit?'':'disabled'}>
+        Remember on this device
+      </label>
+      <span class="hint">By default this clears when the tab closes and is never written to the shared SharePoint database file or the repo — re-paste it each session. Checking "Remember on this device" keeps it in this browser's local storage instead, so it survives closing the tab; it still never leaves this device, but only enable it on a machine you don't share. You'll also paste this same value into the repo's <span class="mono">BC_CLIENT_SECRET</span> GitHub Actions secret, since that's where it's actually used to call Business Central.</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
       ${canEdit?`<button class="btn" id="saveBcConnection">Save Connection</button>`:''}
@@ -3042,6 +3060,11 @@ function attachContentHandlers(){
 
   const ghTokenInput = document.getElementById('ghToken');
   if(ghTokenInput) ghTokenInput.addEventListener('input', ()=>{ setGhToken(ghTokenInput.value.trim()); });
+  const ghTokenRememberEl = document.getElementById('ghTokenRemember');
+  if(ghTokenRememberEl) ghTokenRememberEl.addEventListener('change', ()=>{
+    setGhTokenRemember(ghTokenRememberEl.checked);
+    if(ghTokenRememberEl.checked && ghTokenInput && ghTokenInput.value.trim()) setGhToken(ghTokenInput.value.trim());
+  });
   const saveGithubSettings = document.getElementById('saveGithubSettings');
   if(saveGithubSettings) saveGithubSettings.addEventListener('click', ()=>{
     const gh = ghSettings();
@@ -3059,6 +3082,13 @@ function attachContentHandlers(){
 
   document.querySelectorAll('[data-exttab]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.extmgmtTab = el.dataset.exttab; render(); });
+  });
+  const bcClientSecretInput = document.getElementById('bcClientSecret');
+  if(bcClientSecretInput) bcClientSecretInput.addEventListener('input', ()=>{ setBcClientSecret(bcClientSecretInput.value.trim()); });
+  const bcSecretRememberEl = document.getElementById('bcSecretRemember');
+  if(bcSecretRememberEl) bcSecretRememberEl.addEventListener('change', ()=>{
+    setBcSecretRemember(bcSecretRememberEl.checked);
+    if(bcSecretRememberEl.checked && bcClientSecretInput && bcClientSecretInput.value.trim()) setBcClientSecret(bcClientSecretInput.value.trim());
   });
   const saveBcConnection = document.getElementById('saveBcConnection');
   if(saveBcConnection) saveBcConnection.addEventListener('click', async ()=>{
