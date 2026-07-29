@@ -33,9 +33,9 @@
       }
     ],
     "retentionDays": 7,
-    "lastRunAt": "2026-07-28T17:35:58.218Z",
+    "lastRunAt": "2026-07-29T17:16:04.749Z",
     "lastRunStatus": "error",
-    "lastRunError": "Test: No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Test/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t55104266&aid=FIN'.",
+    "lastRunError": "Debug_Env_D250829: No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Debug_Env_D250829/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t46894247&aid=FIN'. | Test: No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Test/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t55104266&aid=FIN'. | Test_D260320: No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Test_D260320/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t20711430&aid=FIN'.",
     "apiMode": "custom",
     "apiPublisher": "HOXT",
     "apiGroup": "DEVTeam",
@@ -4649,6 +4649,39 @@
               "state": "installed"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "9rwe0ksoj7yl",
+      "timestamp": "2026-07-29T17:16:04.749Z",
+      "results": [
+        {
+          "envId": "0vbo0nuw1cyb",
+          "envName": "Debug_Env_D250829",
+          "envLabel": "Debug_Env_D250829",
+          "envType": "sandbox",
+          "ok": false,
+          "error": "No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Debug_Env_D250829/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t46894247&aid=FIN'.",
+          "extensions": []
+        },
+        {
+          "envId": "ilm4xhkwt5pq",
+          "envName": "Test",
+          "envLabel": "Test",
+          "envType": "sandbox",
+          "ok": false,
+          "error": "No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Test/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t55104266&aid=FIN'.",
+          "extensions": []
+        },
+        {
+          "envId": "pg3m4pl5eg6h",
+          "envName": "Test_D260320",
+          "envLabel": "Test_D260320",
+          "envType": "sandbox",
+          "ok": false,
+          "error": "No HTTP resource was found that matches the request URI 'https://api.businesscentral.dynamics.com/v2.0/ac0408c6-8c09-49d7-bc70-59fd6a76f70d/Test_D260320/api/HOXT/DEVTeam/v2.0/companies(0ab67702-3f46-ee11-b18d-b6f29f9adee5)/installedExtensions?tenant=msasia9740t20711430&aid=FIN'.",
+          "extensions": []
         }
       ]
     }
