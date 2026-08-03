@@ -218,6 +218,32 @@ tbody tr:last-child td{border-bottom:none;}
 tbody tr{transition:var(--transition);}
 tbody tr.clickable:hover{background:var(--surface-2);cursor:pointer;}
 .table-wrap{overflow-x:auto;}
+/* Fixed/pinned table: only the table itself scrolls (both axes), the page
+   around it stays put. Header row stays pinned while scrolling vertically. */
+.table-wrap-fixed{overflow:auto;max-height:min(62vh,640px);border:1px solid var(--border);border-radius:var(--radius-md);}
+.table-wrap-fixed table{border-collapse:separate;border-spacing:0;}
+.table-wrap-fixed thead th{position:sticky;top:0;z-index:6;background:var(--surface-solid);box-shadow:0 1px 0 var(--border-strong);}
+.ext-th-inner{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.ext-th-sub{display:block;font-weight:400;font-size:10.5px;color:var(--text-faint);margin-top:2px;white-space:nowrap;}
+.ext-filter-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;border:1px solid var(--border-strong);background:var(--input-bg);color:var(--text-dim);cursor:pointer;flex-shrink:0;position:relative;}
+.ext-filter-btn svg{width:11px;height:11px;}
+.ext-filter-btn.active{background:var(--accent1);border-color:var(--accent1);color:#fff;}
+.ext-filter-btn .dot{position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;background:var(--warning);}
+.ext-th-cell{position:relative;}
+.ext-filter-panel{position:absolute;top:calc(100% + 6px);left:0;width:230px;background:var(--dropdown-bg);color:var(--dropdown-text);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:10px;z-index:50;text-align:left;font-weight:400;text-transform:none;letter-spacing:normal;}
+.ext-filter-panel input[type="text"]{width:100%;margin-bottom:8px;font-size:12px;}
+.ext-filter-panel .ext-filter-actions{display:flex;justify-content:space-between;gap:6px;font-size:11px;margin-bottom:6px;}
+.ext-filter-panel .ext-filter-actions a{color:var(--accent1);cursor:pointer;text-decoration:none;}
+.ext-filter-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px 0;margin-bottom:8px;}
+.ext-filter-list label{display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:400;}
+.ext-filter-list label input{margin:0;}
+.ext-filter-empty{font-size:11.5px;color:var(--text-faint);padding:6px 2px;}
+.ext-filter-footer{display:flex;justify-content:flex-end;gap:8px;}
+.ext-range-bar{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.ext-range-bar .form-row{margin:0;}
+.ext-range-bar label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;}
+.ext-sticky-col{position:sticky;left:0;z-index:4;background:var(--surface-solid);}
+
 .empty-row td{text-align:center;color:var(--text-faint);padding:36px 12px;font-size:12.5px;}
 
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
@@ -584,6 +610,7 @@ const ICONS = {
   alert:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
   github:'<path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.2 4.2 0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 00-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 00-.1 3.2A4.6 4.6 0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.1-.5 2V21"/>',
   extmgmt:'<path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M9 3h6M9 3v18m6-18h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M15 3v18M5 8h2M5 12h2M5 16h2M17 8h2M17 12h2M17 16h2"/>',
+  filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>',
 };
 function icon(name,cls){ return `<svg class="icon ${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
 
@@ -649,6 +676,7 @@ function seedDB(){
       ticketRepoUrl:'',
       storecustRepoUrl:'',
       extMgmt:{tenantId:'', clientId:'', environments:[], retentionDays:35, basisEnvId:'', customStatuses:[], lastRunAt:null, lastRunStatus:'', lastRunError:''},
+      logRetentionDays:180, // activity log maintenance — see pruneLogs(); 0 = keep forever
     },
     users,
     currentUserId: users[0].id,
@@ -733,6 +761,7 @@ function normalizeDB(db){
       db.settings.github.owner = 'mntinchay';
       db.settings.github.repo = 'HO-BC-ObjectsVersion-Control';
     }
+    db.settings.logRetentionDays = db.settings.logRetentionDays!=null ? db.settings.logRetentionDays : 180;
     db.settings.objectTypes = db.settings.objectTypes || [];
     db.settings.idRanges = db.settings.idRanges || [];
     // Migration: split the old single "Page" object type into Non-API and API
@@ -765,7 +794,25 @@ function normalizeDB(db){
 }
 
 /* ---------------------------- STATE ---------------------------- */
-const state = { view:'dashboard', search:'', statusFilter:'', kindFilter:'', settingsTab:'general', extmgmtTab:'current', modal:null };
+const state = {
+  view:'dashboard', search:'', statusFilter:'', kindFilter:'', settingsTab:'general', extmgmtTab:'current', modal:null,
+  // Extension Management Comparison — Excel-style column filters (null = no filter / show all;
+  // otherwise a Set of allowed values), shared by the Current and Monthly tabs.
+  extFilters:{ name:null, publisher:null },
+  extFilterOpen:null, // which filter dropdown is currently open: 'name' | 'publisher' | null
+  // Monthly Comparison — date range (yyyy-mm-dd strings) and the single captured
+  // day currently shown in the detailed extension x environment grid.
+  extRangeFrom:'', extRangeTo:'', extMonthlyDay:'', extFilterSearch:'',
+};
+// Registered once (not inside render/attachHandlers, which run on every
+// re-render) — closes an open Excel-style filter dropdown when clicking
+// anywhere outside of it.
+document.addEventListener('click', e=>{
+  if(state.extFilterOpen && !e.target.closest('[data-extfilterpanel]') && !e.target.closest('[data-extfiltertoggle]')){
+    state.extFilterOpen = null;
+    render();
+  }
+});
 
 function currentUser(){ return DB.users.find(u=>u.id===DB.currentUserId) || DB.users[0]; }
 function can(category, action){
@@ -784,6 +831,7 @@ function toast(msg, kind){
 }
 function log(action, entity, entityName, details){
   DB.logs.unshift({id:uid(), timestamp:new Date().toISOString(), user:currentUser()?currentUser().name:'System', action, entity, entityName, details:details||''});
+  pruneLogs();
   saveDB();
 }
 
@@ -1511,7 +1559,8 @@ function settingsGeneral(){
         <button class="btn" id="exportDb">${icon('download')} Export Test Data (.json)</button>
         <button class="btn btn-danger" id="clearLocalDevBtn">${icon('trash')} Clear Local Test Data</button>
       </div>
-    </div>`;
+    </div>
+    ${settingsLogMaintenance(locked)}`;
   }
   const account = msalInstance ? msalInstance.getActiveAccount() : null;
   return `
@@ -1530,6 +1579,22 @@ function settingsGeneral(){
       <button class="btn" id="exportDb">${icon('download')} Export Backup (.json)</button>
       <label class="btn" style="margin:0;">${icon('upload')} Import &amp; Push to SharePoint<input type="file" id="importDbFile" accept="application/json" style="display:none;"></label>
       <button class="btn btn-ghost" id="msSignOutBtn">Sign out of Microsoft</button>
+    </div>
+  </div>
+  ${settingsLogMaintenance(locked)}`;
+}
+function settingsLogMaintenance(locked){
+  const days = DB.settings.logRetentionDays || 0;
+  return `
+  <div class="card" style="max-width:640px;margin-top:18px;">
+    <div class="section-title"><h3>${icon('logs')} Log Maintenance</h3><span class="hint">${DB.logs.length} entries stored</span></div>
+    <div class="form-row">
+      <label>Retention period (days) <span class="hint">Activity log entries older than this are cleared automatically whenever a new entry is logged. Use 0 to keep logs indefinitely.</span></label>
+      <input type="number" id="logRetentionDays" min="0" max="3650" value="${days}" style="max-width:140px;" ${locked?'disabled':''}>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+      ${locked?'':`<button class="btn btn-primary" id="saveLogRetention">Save Retention</button>`}
+      ${locked?'':`<button class="btn btn-danger" id="clearLogsNowBtn">${icon('trash')} Clear Logs Now</button>`}
     </div>
   </div>`;
 }
@@ -2032,6 +2097,16 @@ function pruneExtSnapshots(){
   const cutoff = Date.now() - days*24*60*60*1000;
   DB.extSnapshots = DB.extSnapshots.filter(s=> new Date(s.timestamp).getTime() >= cutoff);
 }
+// Log Maintenance (Settings > General): clears activity log entries older
+// than DB.settings.logRetentionDays. A retention of 0 means "keep forever" —
+// nothing is pruned. Runs automatically after every new log entry, and can
+// also be triggered on demand via "Clear Logs Now".
+function pruneLogs(){
+  const days = DB.settings.logRetentionDays || 0;
+  if(!days) return;
+  const cutoff = Date.now() - days*24*60*60*1000;
+  DB.logs = (DB.logs||[]).filter(l=> new Date(l.timestamp).getTime() >= cutoff);
+}
 // Compares two dotted/segmented version strings numerically, segment by segment
 // (e.g. "23.1.2.0" vs "23.10.0.0" — a plain string compare would get this wrong).
 // Returns -1 / 0 / 1. Missing or non-numeric segments are treated as 0.
@@ -2128,6 +2203,94 @@ function computeCellStatus(name, env, result, basisResult, basisEnv, em, histMap
   const cmp = compareVersions(ext.version, basisExt.version);
   if(cmp < 0) return {key:'outdated', label:'Not Updated', cls:'pending', detail:`Basis is on ${basisExt.version||'—'}`};
   return {key:'ahead', label:'Ahead of Basis', cls:'drafting', detail:`Basis is on ${basisExt.version||'—'}`};
+}
+// The timestamp of the most recent snapshot in which this environment was read
+// successfully — shown as "as of <date>" under each environment's column header
+// so it's clear the data isn't necessarily from the very latest snapshot (e.g.
+// if that environment's own read failed on the last run).
+function envLastUpdated(envId){
+  for(let i=DB.extSnapshots.length-1;i>=0;i--){
+    const r = envResult(DB.extSnapshots[i], envId);
+    if(r && r.ok) return DB.extSnapshots[i].timestamp;
+  }
+  return null;
+}
+// Publisher for a given extension name — extensions are expected to report the
+// same publisher in every environment, but reads the first non-empty value
+// found across the supplied env results just in case one environment's copy
+// is missing it.
+function extPublisherForName(name, resultsByEnv, envs){
+  for(const e of envs){
+    const r = resultsByEnv[e.id];
+    if(!r || !r.ok) continue;
+    const ext = (r.extensions||[]).find(x=>x.name===name);
+    if(ext && ext.publisher) return ext.publisher;
+  }
+  return '';
+}
+// Builds the full universe of extension names / publishers available across the
+// given set of (env -> result) maps, for populating the Excel-style filter
+// dropdowns. Accepts an array of {resultsByEnv, envs} "slices" so both the
+// Current tab (one snapshot) and Monthly tab (many days) can share this.
+function extFilterUniverse(slices){
+  const names = new Set(), publishers = new Set();
+  slices.forEach(({resultsByEnv, envs})=>{
+    envs.forEach(e=>{
+      const r = resultsByEnv[e.id];
+      if(!r || !r.ok) return;
+      (r.extensions||[]).forEach(x=>{ if(x.name) names.add(x.name); if(x.publisher) publishers.add(x.publisher); });
+    });
+  });
+  return {
+    names:[...names].sort((a,b)=>a.localeCompare(b)),
+    publishers:[...publishers].sort((a,b)=>a.localeCompare(b)),
+  };
+}
+// Filters a list of extension names down to what's allowed by the active
+// name/publisher filters (state.extFilters). A null filter means "show all".
+function applyExtFilters(names, publisherLookup){
+  const f = state.extFilters;
+  return names.filter(name=>{
+    if(f.name && f.name.size && !f.name.has(name)) return false;
+    if(f.publisher && f.publisher.size){
+      const pub = publisherLookup(name) || '';
+      if(!f.publisher.has(pub)) return false;
+    }
+    return true;
+  });
+}
+// Renders one Excel-style filter dropdown (search box + select all/clear +
+// checkbox list) anchored under a column header. `kind` is 'name' or
+// 'publisher' and keys into state.extFilters.
+function extFilterPanel(kind, options){
+  const selected = state.extFilters[kind]; // null = all selected
+  const q = (state.extFilterSearch||'').toLowerCase();
+  const visible = q ? options.filter(o=>o.toLowerCase().includes(q)) : options;
+  return `
+  <div class="ext-filter-panel" data-extfilterpanel="${kind}">
+    <input type="text" placeholder="Search..." id="extFilterSearch" value="${escapeAttr(state.extFilterSearch||'')}">
+    <div class="ext-filter-actions">
+      <a data-extfilterall="${kind}">Select all</a>
+      <a data-extfilterclear="${kind}">Clear</a>
+    </div>
+    <div class="ext-filter-list">
+      ${visible.length ? visible.map(o=>`
+        <label><input type="checkbox" class="ext-filter-opt" data-extfilterkind="${kind}" value="${escapeAttr(o)}" ${(!selected || selected.has(o))?'checked':''}> ${escapeHtml(o)}</label>
+      `).join('') : `<div class="ext-filter-empty">No matches.</div>`}
+    </div>
+    <div class="ext-filter-footer">
+      <button class="btn btn-sm btn-primary" data-extfilterdone="${kind}" type="button">Done</button>
+    </div>
+  </div>`;
+}
+function extFilterButton(kind, options){
+  const selected = state.extFilters[kind];
+  const active = !!(selected && selected.size && selected.size < options.length);
+  return `
+  <span class="ext-th-cell" style="display:inline-block;">
+    <button type="button" class="ext-filter-btn ${active?'active':''}" data-extfiltertoggle="${kind}" title="Filter">${icon('filter')}${active?'<span class="dot"></span>':''}</button>
+    ${state.extFilterOpen===kind ? extFilterPanel(kind, options) : ''}
+  </span>`;
 }
 // bcGetToken/bcFetchExtensions/runExtensionSnapshot/scheduleExtensionSnapshot were removed —
 // direct browser-to-BC calls can never succeed (CORS on the Microsoft identity
@@ -2399,7 +2562,7 @@ function viewExtMgmt(){
 
   <div class="tabs">
     <div class="tab ${tab==='current'?'active':''}" data-exttab="current">All Environments — Current</div>
-    <div class="tab ${tab==='monthly'?'active':''}" data-exttab="monthly">Monthly Comparison (30 Days)</div>
+    <div class="tab ${tab==='monthly'?'active':''}" data-exttab="monthly">Monthly Comparison</div>
   </div>
   ${tab==='monthly' ? extComparisonMonthly(basis, em) : extComparisonCurrent(snap, basis, em)}`;
 }
@@ -2561,7 +2724,13 @@ function extStatusLegend(em){
     ${em.customStatuses&&em.customStatuses.length?'':' &nbsp; <span style="color:var(--text-faint);">(add more under Settings &rsaquo; Extension Management &rsaquo; Comparison Status Rules)</span>'}
   </p>`;
 }
-function extComparisonCurrent(snap, basis, em){
+// Shared "Installed Extensions" grid — used by both the Current tab and the
+// per-day detail view on the Monthly tab. Column order: Basis environment
+// (pinned first, if one is set) -> Extension Name (with filter) -> Publisher
+// Name (with filter) -> every other environment, each showing its own
+// "as of <date>" last-updated stamp. Wrapped in a fixed-height scroller so
+// only the table scrolls (both axes), never the page.
+function extGridTable(snap, basis, em){
   if(!snap){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
       ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet. Configure the connection and environments above, then click <b>Run Sync Now</b>.</p>
@@ -2569,64 +2738,120 @@ function extComparisonCurrent(snap, basis, em){
   }
   const envs = em.environments||[];
   const ordered = [...envs.filter(e=>e.type==='production'), ...envs.filter(e=>e.type!=='production')];
+  const otherEnvs = ordered.filter(e=>!basis || e.id!==basis.id);
   const resultsByEnv = {}, histByEnv = {};
   ordered.forEach(e=>{ resultsByEnv[e.id] = envResult(snap, e.id); histByEnv[e.id] = buildEnvHistoryMap(e.id, snap); });
   const basisResult = basis ? resultsByEnv[basis.id] : null;
   const allNames = new Set();
   ordered.forEach(e=>{ const r = resultsByEnv[e.id]; if(r && r.ok) (r.extensions||[]).forEach(x=>allNames.add(x.name)); });
-  const names = [...allNames].sort((a,b)=>a.localeCompare(b));
+  const publisherFor = name => extPublisherForName(name, resultsByEnv, ordered);
+  const universe = extFilterUniverse([{resultsByEnv, envs:ordered}]);
+  const names = applyExtFilters([...allNames].sort((a,b)=>a.localeCompare(b)), publisherFor);
+  const colCount = (basis?1:0) + 2 + otherEnvs.length;
+  const envHeader = e => `<th>
+      <span class="ext-th-inner">${escapeHtml(e.label||e.name)}
+        ${e.type==='production'?`<span class="badge active" style="margin-left:2px;">Prod</span>`:`<span class="badge drafting" style="margin-left:2px;">Sandbox</span>`}
+        ${resultsByEnv[e.id]&&!resultsByEnv[e.id].ok?`<span class="badge danger" style="margin-left:2px;">sync error</span>`:''}
+      </span>
+      <span class="ext-th-sub">as of ${envLastUpdated(e.id)?timeAgo(envLastUpdated(e.id)):'—'}</span>
+    </th>`;
+  return `
+  <div class="table-wrap table-wrap-fixed">
+  <table>
+    <thead><tr>
+      ${basis?`<th class="ext-sticky-col">
+        <span class="ext-th-inner">${escapeHtml(basis.label||basis.name)} <span class="badge pending" style="margin-left:2px;">Basis</span></span>
+        <span class="ext-th-sub">as of ${envLastUpdated(basis.id)?timeAgo(envLastUpdated(basis.id)):'—'}</span>
+      </th>`:''}
+      <th ${basis?'':'class="ext-sticky-col"'}><span class="ext-th-inner">Extension Name ${extFilterButton('name', universe.names)}</span></th>
+      <th><span class="ext-th-inner">Publisher Name ${extFilterButton('publisher', universe.publishers)}</span></th>
+      ${otherEnvs.map(envHeader).join('')}
+    </tr></thead>
+    <tbody>
+    ${names.length ? names.map(name=>{
+      const pub = publisherFor(name) || '—';
+      const basisExt = basisResult && basisResult.ok ? (basisResult.extensions||[]).find(x=>x.name===name) : null;
+      const basisTd = basis ? `<td class="ext-sticky-col">${basisExt
+          ? `<span class="badge active" title="${escapeAttr(basisExt.version||'')}">${escapeHtml(basisExt.version||'—')}</span>`
+          : `<span class="badge obsolete">Not in Basis</span>`}</td>` : '';
+      const nameTd = basis
+        ? `<td style="font-weight:600;">${escapeHtml(name)}</td>`
+        : `<td class="ext-sticky-col" style="font-weight:600;">${escapeHtml(name)}</td>`;
+      return `<tr>
+        ${basisTd}
+        ${nameTd}
+        <td>${escapeHtml(pub)}</td>
+        ${otherEnvs.map(e=>{
+          const r = resultsByEnv[e.id];
+          if(!r || !r.ok) return `<td style="color:var(--text-faint);">—</td>`;
+          const st = computeCellStatus(name, e, r, basisResult, basis, em, histByEnv[e.id]);
+          if(st.key==='none') return `<td style="color:var(--text-faint);">—</td>`;
+          const ext = (r.extensions||[]).find(x=>x.name===name);
+          const versionTxt = ext&&ext.version ? escapeHtml(ext.version) : '';
+          return `<td><span class="badge ${st.cls}" title="${escapeAttr(st.detail||st.label)}">${versionTxt?`${versionTxt} — `:''}${escapeHtml(st.label)}</span></td>`;
+        }).join('')}
+      </tr>`;
+    }).join('') : `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">${allNames.size?'No extensions match the current filters.':'No extensions returned in this snapshot.'}</td></tr>`}
+    </tbody>
+  </table>
+  </div>`;
+}
+function extComparisonCurrent(snap, basis, em){
+  if(!snap){
+    return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
+      ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet. Configure the connection and environments above, then click <b>Run Sync Now</b>.</p>
+    </div>`;
+  }
   return `
   <div class="card" style="padding:0;">
     <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('layers')} Installed Extensions — All Environments</h3><span class="hint">Snapshot captured ${timeAgo(snap.timestamp)}${basis?` — differences shown relative to ${escapeHtml(basis.label||basis.name)}`:' — check a Basis environment on Settings above to enable comparison'}</span></div>
-    <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Extension</th>
-        ${ordered.map(e=>`<th>${escapeHtml(e.label||e.name)}
-          ${e.type==='production'?` <span class="badge active" style="margin-left:4px;">Production</span>`:` <span class="badge drafting" style="margin-left:4px;">Sandbox</span>`}
-          ${basis&&e.id===basis.id?` <span class="badge pending" style="margin-left:4px;">Basis</span>`:''}
-          ${resultsByEnv[e.id]&&!resultsByEnv[e.id].ok?` <span class="badge danger" style="margin-left:4px;">sync error</span>`:''}
-        </th>`).join('')}
-      </tr></thead>
-      <tbody>
-      ${names.length ? names.map(name=>`
-        <tr>
-          <td style="font-weight:600;">${escapeHtml(name)}</td>
-          ${ordered.map(e=>{
-            const r = resultsByEnv[e.id];
-            if(!r || !r.ok) return `<td style="color:var(--text-faint);">—</td>`;
-            const st = computeCellStatus(name, e, r, basisResult, basis, em, histByEnv[e.id]);
-            if(st.key==='none') return `<td style="color:var(--text-faint);">—</td>`;
-            const ext = (r.extensions||[]).find(x=>x.name===name);
-            const versionTxt = ext&&ext.version ? escapeHtml(ext.version) : '';
-            return `<td><span class="badge ${st.cls}" title="${escapeAttr(st.detail||st.label)}">${versionTxt?`${versionTxt} — `:''}${escapeHtml(st.label)}</span></td>`;
-          }).join('')}
-        </tr>`).join('') : `<tr><td colspan="${ordered.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">No extensions returned in the latest snapshot.</td></tr>`}
-      </tbody>
-    </table>
-    </div>
+    ${extGridTable(snap, basis, em)}
   </div>
   ${extStatusLegend(em)}`;
 }
 function extComparisonMonthly(basis, em){
-  const days = snapshotsLastNDays(30);
-  if(!days.length){
+  const retentionDays = em.retentionDays || 35;
+  const allDays = snapshotsLastNDays(Math.min(retentionDays, 90));
+  if(!allDays.length){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
       ${icon('history')}<p style="margin-top:10px;font-size:13px;">No history yet — a snapshot is captured automatically once a day, or run a manual sync above.</p>
     </div>`;
   }
+  const earliest = allDays[0].timestamp.slice(0,10);
+  const latest = allDays[allDays.length-1].timestamp.slice(0,10);
+  // Default range: the 30 most recent captured days (or fewer if history is shorter).
+  if(!state.extRangeFrom) state.extRangeFrom = allDays[Math.max(0, allDays.length-30)].timestamp.slice(0,10);
+  if(!state.extRangeTo) state.extRangeTo = latest;
+  if(state.extRangeFrom < earliest) state.extRangeFrom = earliest;
+  if(state.extRangeTo > latest) state.extRangeTo = latest;
+  if(state.extRangeFrom > state.extRangeTo) state.extRangeFrom = state.extRangeTo;
+  const days = allDays.filter(s=>{ const d = s.timestamp.slice(0,10); return d >= state.extRangeFrom && d <= state.extRangeTo; });
   const envs = (em.environments||[]).filter(e=>!basis || e.id!==basis.id);
+
+  if(!state.extMonthlyDay || !days.some(s=>s.timestamp.slice(0,10)===state.extMonthlyDay)){
+    state.extMonthlyDay = days.length ? days[days.length-1].timestamp.slice(0,10) : '';
+  }
+  const selectedSnap = days.find(s=>s.timestamp.slice(0,10)===state.extMonthlyDay) || null;
+
   return `
-  <div class="card" style="padding:0;">
-    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('history')} Each Environment vs Basis — Last ${days.length} Captured Day(s) (up to 30)</h3><span class="hint">Extensions differing from the basis environment (missing, not updated, removed, downgraded, or environment-only) on each captured day</span></div>
-    <div class="table-wrap">
+  <div class="card" style="margin-bottom:18px;">
+    <div class="ext-range-bar">
+      <div class="form-row"><label>From</label><input type="date" id="extRangeFrom" value="${state.extRangeFrom}" min="${earliest}" max="${state.extRangeTo}"></div>
+      <div class="form-row"><label>To</label><input type="date" id="extRangeTo" value="${state.extRangeTo}" min="${state.extRangeFrom}" max="${latest}"></div>
+      <span class="hint" style="padding-bottom:9px;">${days.length} captured day(s) in range (${allDays.length} available — retention ${retentionDays}d)</span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;margin-bottom:18px;">
+    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('history')} Each Environment vs Basis — ${days.length} Captured Day(s)</h3><span class="hint">Extensions differing from the basis environment (missing, not updated, removed, downgraded, or environment-only) on each captured day in range</span></div>
+    <div class="table-wrap table-wrap-fixed">
     <table>
-      <thead><tr><th>Environment</th>${days.map(s=>`<th>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</th>`).join('')}</tr></thead>
+      <thead><tr><th class="ext-sticky-col">Environment</th>${days.map(s=>`<th>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</th>`).join('')}</tr></thead>
       <tbody>
       ${(!basis) ? `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Check a Basis environment on Settings &rsaquo; Extension Management to enable this comparison.</td></tr>`
       : envs.length ? envs.map(env=>`
         <tr>
-          <td style="font-weight:600;">${escapeHtml(env.label||env.name)}${env.type==='production'?` <span class="badge active" style="margin-left:4px;">Production</span>`:` <span class="badge drafting" style="margin-left:4px;">Sandbox</span>`}</td>
+          <td class="ext-sticky-col" style="font-weight:600;">${escapeHtml(env.label||env.name)}${env.type==='production'?` <span class="badge active" style="margin-left:4px;">Production</span>`:` <span class="badge drafting" style="margin-left:4px;">Sandbox</span>`}</td>
           ${days.map(s=>{
             const basisR = envResult(s, basis.id);
             const envR = envResult(s, env.id);
@@ -2641,14 +2866,29 @@ function extComparisonMonthly(basis, em){
             });
             const n = counts.missing+counts.outdated+counts.removed+counts.downgraded+counts.custom;
             const cls = n===0 ? 'active' : (counts.downgraded||counts.removed||counts.missing) ? 'danger' : 'pending';
-            return `<td><span class="badge ${cls}" title="${escapeAttr(titleParts.join(' | ')||'No differences')}">${n===0?'In sync':`${n} diff${n===1?'':'s'}`}</span></td>`;
+            const dayStr = s.timestamp.slice(0,10);
+            return `<td><span class="badge ${cls}" title="${escapeAttr(titleParts.join(' | ')||'No differences')} — click to view this day" style="cursor:pointer;" data-extdaypick="${dayStr}">${n===0?'In sync':`${n} diff${n===1?'':'s'}`}</span></td>`;
           }).join('')}
         </tr>`).join('') : `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Add another environment to compare against the basis.</td></tr>`}
       </tbody>
     </table>
     </div>
   </div>
-  <p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Hover a badge to see which extensions differ and why. Counts include Missing, Not Updated, Removed, Downgraded and matching custom statuses. Days without a captured snapshot, or without a successful basis/environment read, show as "—". Snapshots are kept for the configured retention window (Settings &rsaquo; Extension Management), capped at 30 days here.</p>`;
+  <p style="margin-top:-4px;margin-bottom:22px;font-size:11.5px;color:var(--text-faint);">Hover a badge to see which extensions differ and why, or click one to jump the detail grid below to that day. Days without a captured snapshot, or without a successful basis/environment read, show as "—".</p>
+
+  <div class="card" style="padding:0;">
+    <div class="section-title" style="padding:20px 20px 4px;flex-wrap:wrap;gap:10px;">
+      <h3>${icon('layers')} Installed Extensions — All Environments</h3>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
+        <span class="hint">${selectedSnap ? `Snapshot captured ${timeAgo(selectedSnap.timestamp)}${basis?` — vs ${escapeHtml(basis.label||basis.name)}`:''}` : 'Pick a captured day.'}</span>
+        <select id="extMonthlyDaySelect" style="min-width:150px;">
+          ${days.slice().reverse().map(s=>{ const d=s.timestamp.slice(0,10); return `<option value="${d}" ${d===state.extMonthlyDay?'selected':''}>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</option>`; }).join('')}
+        </select>
+      </div>
+    </div>
+    ${extGridTable(selectedSnap, basis, em)}
+  </div>
+  ${extStatusLegend(em)}`;
 }
 
 /* ======================================================================
@@ -3204,6 +3444,30 @@ function attachContentHandlers(){
       window.location.reload();
     });
   });
+  const saveLogRetention = document.getElementById('saveLogRetention');
+  if(saveLogRetention) saveLogRetention.addEventListener('click', ()=>{
+    const v = parseInt(document.getElementById('logRetentionDays').value, 10);
+    DB.settings.logRetentionDays = (isNaN(v) || v<0) ? 0 : v;
+    pruneLogs();
+    saveDB();
+    toast('Log retention saved.', 'success');
+    render();
+  });
+  const clearLogsNowBtn = document.getElementById('clearLogsNowBtn');
+  if(clearLogsNowBtn) clearLogsNowBtn.addEventListener('click', ()=>{
+    const days = DB.settings.logRetentionDays || 0;
+    confirmModal('Run log maintenance now?', days
+      ? `This permanently deletes activity log entries older than ${days} day(s).`
+      : 'Retention is set to 0 (keep forever) — nothing will be deleted. Set a retention period above first if you want this to remove anything.',
+      ()=>{
+        const before = DB.logs.length;
+        pruneLogs();
+        saveDB();
+        const removed = before - DB.logs.length;
+        toast(`Removed ${removed} old log entr${removed===1?'y':'ies'}.`, 'success');
+        render();
+      });
+  });
   const exportDb = document.getElementById('exportDb');
   if(exportDb) exportDb.addEventListener('click', exportDatabase);
   const importDbFile = document.getElementById('importDbFile');
@@ -3256,6 +3520,57 @@ function attachContentHandlers(){
 
   document.querySelectorAll('[data-exttab]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.extmgmtTab = el.dataset.exttab; render(); });
+  });
+
+  /* ---- Extension Management: Excel-style column filters ---- */
+  document.querySelectorAll('[data-extfiltertoggle]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const kind = el.dataset.extfiltertoggle;
+      state.extFilterOpen = state.extFilterOpen===kind ? null : kind;
+      state.extFilterSearch = '';
+      render();
+    });
+  });
+  const extFilterPanelEl = document.querySelector('[data-extfilterpanel]');
+  if(extFilterPanelEl) extFilterPanelEl.addEventListener('click', e=> e.stopPropagation());
+  const extFilterSearchEl = document.getElementById('extFilterSearch');
+  if(extFilterSearchEl) extFilterSearchEl.addEventListener('input', e=>{ state.extFilterSearch = e.target.value; renderInPlace('extFilterSearch'); });
+  document.querySelectorAll('.ext-filter-opt').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const kind = cb.dataset.extfilterkind;
+      const panel = cb.closest('[data-extfilterpanel]');
+      const allOptsInPanel = [...panel.querySelectorAll('.ext-filter-opt')];
+      // Lazily materialize the "all selected" (null) state into an explicit
+      // set of every currently-known option the first time something is
+      // unchecked, so partially-filtered search results don't wipe out
+      // selections that are just scrolled/searched out of view.
+      if(state.extFilters[kind]===null){
+        state.extFilters[kind] = new Set(allOptsInPanel.map(o=>o.value));
+      }
+      if(cb.checked) state.extFilters[kind].add(cb.value); else state.extFilters[kind].delete(cb.value);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-extfilterall]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.extFilters[el.dataset.extfilterall] = null; render(); });
+  });
+  document.querySelectorAll('[data-extfilterclear]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.extFilters[el.dataset.extfilterclear] = new Set(); render(); });
+  });
+  document.querySelectorAll('[data-extfilterdone]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.extFilterOpen = null; render(); });
+  });
+
+  /* ---- Extension Management: Monthly date range + day picker ---- */
+  const extRangeFrom = document.getElementById('extRangeFrom');
+  if(extRangeFrom) extRangeFrom.addEventListener('change', ()=>{ state.extRangeFrom = extRangeFrom.value; render(); });
+  const extRangeTo = document.getElementById('extRangeTo');
+  if(extRangeTo) extRangeTo.addEventListener('change', ()=>{ state.extRangeTo = extRangeTo.value; render(); });
+  const extMonthlyDaySelect = document.getElementById('extMonthlyDaySelect');
+  if(extMonthlyDaySelect) extMonthlyDaySelect.addEventListener('change', ()=>{ state.extMonthlyDay = extMonthlyDaySelect.value; render(); });
+  document.querySelectorAll('[data-extdaypick]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.extMonthlyDay = el.dataset.extdaypick; render(); });
   });
   const bcClientSecretInput = document.getElementById('bcClientSecret');
   if(bcClientSecretInput) bcClientSecretInput.addEventListener('input', ()=>{ setBcClientSecret(bcClientSecretInput.value.trim()); });
@@ -3473,16 +3788,17 @@ function attachContentHandlers(){
   });
 }
 
-function renderInPlace(){
+function renderInPlace(activeId){
   // lightweight re-render of just the content area for smooth typing in search boxes.
   // Only rebinds content-scoped handlers (chrome/sidebar listeners stay untouched and unduplicated).
+  activeId = activeId || 'searchInput';
   const content = document.querySelector('.content');
   if(!content) return;
-  const prevInput = document.getElementById('searchInput');
+  const prevInput = document.getElementById(activeId);
   const caret = prevInput ? prevInput.selectionStart : null;
   content.innerHTML = renderView();
   attachContentHandlers();
-  const nextInput = document.getElementById('searchInput');
+  const nextInput = document.getElementById(activeId);
   if(nextInput && caret!==null){ nextInput.focus(); nextInput.setSelectionRange(caret, caret); }
 }
 
