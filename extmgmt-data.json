@@ -33,6 +33,17 @@
       }
     ],
     "retentionDays": 7,
+    "basisEnvId": "",
+    "customStatuses": [
+      {
+        "id": "td3wrynqvdrf",
+        "label": "",
+        "field": "version",
+        "operator": "contains",
+        "value": "",
+        "color": "warning"
+      }
+    ],
     "lastRunAt": "2026-08-03T08:27:26.446Z",
     "lastRunStatus": "success",
     "lastRunError": "",
