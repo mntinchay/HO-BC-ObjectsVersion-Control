@@ -230,6 +230,8 @@ tbody tr.clickable:hover{background:var(--surface-2);cursor:pointer;}
 .badge.pending .badge-dot{background:var(--warning);}
 .badge.obsolete{background:var(--obsolete-soft);color:var(--obsolete);}
 .badge.obsolete .badge-dot{background:var(--obsolete);}
+.badge.danger{background:var(--danger-soft);color:var(--danger);}
+.badge.danger .badge-dot{background:var(--danger);}
 .badge.kind-project{background:rgba(125,211,252,.14);color:#7dd3fc;}
 .badge.kind-ticket{background:rgba(59,130,246,.16);color:#60a5fa;}
 .badge.kind-storecust{background:rgba(29,78,216,.20);color:#93b8fb;}
@@ -646,7 +648,7 @@ function seedDB(){
       passwordPolicy:{minLength:8, requireUppercase:true, requireNumber:true, requireSymbol:false},
       ticketRepoUrl:'',
       storecustRepoUrl:'',
-      extMgmt:{tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:''},
+      extMgmt:{tenantId:'', clientId:'', environments:[], retentionDays:35, basisEnvId:'', customStatuses:[], lastRunAt:null, lastRunStatus:'', lastRunError:''},
     },
     users,
     currentUserId: users[0].id,
@@ -712,7 +714,9 @@ function normalizeDB(db){
     db.settings.extMgmt.tenantId = db.settings.extMgmt.tenantId || '';
     db.settings.extMgmt.clientId = db.settings.extMgmt.clientId || '';
     db.settings.extMgmt.environments = db.settings.extMgmt.environments || [];
-    db.settings.extMgmt.retentionDays = db.settings.extMgmt.retentionDays || 7;
+    db.settings.extMgmt.retentionDays = db.settings.extMgmt.retentionDays || 35;
+    db.settings.extMgmt.basisEnvId = db.settings.extMgmt.basisEnvId || '';
+    db.settings.extMgmt.customStatuses = db.settings.extMgmt.customStatuses || [];
     db.settings.extMgmt.lastRunAt = db.settings.extMgmt.lastRunAt || null;
     db.settings.extMgmt.lastRunStatus = db.settings.extMgmt.lastRunStatus || '';
     db.settings.extMgmt.lastRunError = db.settings.extMgmt.lastRunError || '';
@@ -1910,8 +1914,10 @@ function setBcClientSecret(s){
 }
 function extMgmtSettings(){
   return DB.settings.extMgmt || (DB.settings.extMgmt = {
-    tenantId:'', clientId:'', environments:[], retentionDays:7, lastRunAt:null, lastRunStatus:'', lastRunError:'',
+    tenantId:'', clientId:'', environments:[], retentionDays:35, lastRunAt:null, lastRunStatus:'', lastRunError:'',
     apiMode:'custom', apiPublisher:'', apiGroup:'', apiVersion:'v2.0',
+    basisEnvId:'', // env id used as the comparison baseline — checkbox on Settings > Extension Management; falls back to the env typed "Production"
+    customStatuses:[], // admin-defined conditional statuses layered on top of the built-in ones — see settingsExtMgmt()
   });
 }
 const EXTMGMT_DATA_PATH = 'extmgmt-data.json';
@@ -1979,6 +1985,7 @@ async function saveExtMgmtToGithubImpl(commitMessage){
     tenantId: local.tenantId, clientId: local.clientId, environments: local.environments,
     apiMode: local.apiMode, apiPublisher: local.apiPublisher, apiGroup: local.apiGroup,
     apiVersion: local.apiVersion, retentionDays: local.retentionDays,
+    basisEnvId: local.basisEnvId, customStatuses: local.customStatuses,
   };
   DB.settings.extMgmt = merged;
   DB.extSnapshots = remoteSnapshots;
@@ -1986,14 +1993,26 @@ async function saveExtMgmtToGithubImpl(commitMessage){
   await githubPutFile(EXTMGMT_DATA_PATH, JSON.stringify(payload, null, 2), commitMessage || `Update Extension Management data (${new Date().toISOString()})`);
 }
 function prodEnv(){ return (extMgmtSettings().environments||[]).find(e=>e.type==='production') || null; }
+// The environment used as the comparison baseline everywhere on the Extension
+// Management Comparison page. Set via the "Basis" checkbox on Settings >
+// Extension Management > Environments; falls back to whichever environment
+// is typed Production if nothing's explicitly checked (keeps old data working).
+function getBasisEnv(em){
+  em = em || extMgmtSettings();
+  const envs = em.environments||[];
+  return envs.find(e=>e.id===em.basisEnvId) || envs.find(e=>e.type==='production') || null;
+}
 function latestSnapshot(){ return DB.extSnapshots.length ? DB.extSnapshots[DB.extSnapshots.length-1] : null; }
 function envResult(snap, envId){ return snap ? (snap.results||[]).find(r=>r.envId===envId) || null : null; }
-// One snapshot per calendar day (most recent capture that day), most recent `retentionDays` days.
-function snapshotsLastNDays(){
-  const days = extMgmtSettings().retentionDays || 7;
+// One snapshot per calendar day (most recent capture that day), most recent N days.
+// Defaults to the configured retention window; pass an explicit `days` (e.g. 30
+// for the Monthly comparison) to cap it further without changing what's stored.
+function snapshotsLastNDays(days){
+  const retention = extMgmtSettings().retentionDays || 35;
+  const n = Math.min(days || retention, retention);
   const byDay = {};
   DB.extSnapshots.forEach(s=>{ byDay[s.timestamp.slice(0,10)] = s; });
-  return Object.keys(byDay).sort().slice(-days).map(d=>byDay[d]);
+  return Object.keys(byDay).sort().slice(-n).map(d=>byDay[d]);
 }
 function diffExtensions(prodExts, envExts){
   const prodMap = new Map((prodExts||[]).map(e=>[e.name, e]));
@@ -2009,9 +2028,106 @@ function diffExtensions(prodExts, envExts){
   return {missing, versionMismatch, extra, matching};
 }
 function pruneExtSnapshots(){
-  const days = extMgmtSettings().retentionDays || 7;
+  const days = extMgmtSettings().retentionDays || 35;
   const cutoff = Date.now() - days*24*60*60*1000;
   DB.extSnapshots = DB.extSnapshots.filter(s=> new Date(s.timestamp).getTime() >= cutoff);
+}
+// Compares two dotted/segmented version strings numerically, segment by segment
+// (e.g. "23.1.2.0" vs "23.10.0.0" — a plain string compare would get this wrong).
+// Returns -1 / 0 / 1. Missing or non-numeric segments are treated as 0.
+function compareVersions(a,b){
+  if((a||'')===(b||'')) return 0;
+  if(!a) return -1;
+  if(!b) return 1;
+  const pa = String(a).split(/[.\-+]/), pb = String(b).split(/[.\-+]/);
+  const len = Math.max(pa.length, pb.length);
+  for(let i=0;i<len;i++){
+    const na = parseInt(pa[i],10), nb = parseInt(pb[i],10);
+    const va = isNaN(na)?0:na, vb = isNaN(nb)?0:nb;
+    if(va!==vb) return va<vb ? -1 : 1;
+  }
+  return 0;
+}
+// Builds, for one environment, a name -> {lastVersion, everPresent} map from every
+// stored snapshot *before* the one passed as `snap` (i.e. everything except the
+// "current" reading). Used to detect the two historical statuses: an extension
+// that used to be there and now isn't (Removed Extension), and one whose version
+// went backwards since a prior snapshot (Downgraded Version). Walking days in
+// ascending order means the last write for a name is always its most recent
+// prior state, so one pass is enough.
+function buildEnvHistoryMap(envId, snap){
+  const map = new Map();
+  const byDay = {};
+  DB.extSnapshots.forEach(s=>{ if(snap && s.id===snap.id) return; byDay[s.timestamp.slice(0,10)] = s; });
+  Object.keys(byDay).sort().forEach(d=>{
+    const r = envResult(byDay[d], envId);
+    if(r && r.ok){
+      (r.extensions||[]).forEach(ext=>{
+        const cur = map.get(ext.name) || {lastVersion:null, everPresent:false};
+        cur.everPresent = true;
+        if(ext.version) cur.lastVersion = ext.version;
+        map.set(ext.name, cur);
+      });
+    }
+  });
+  return map;
+}
+// Evaluates one admin-defined conditional status rule (Settings > Extension
+// Management > Comparison Status Rules) against a single extension cell.
+// Rules only ever match an *installed* extension's name or version — they
+// layer extra labels on top of the built-in statuses, they don't invent
+// installs that aren't there.
+function matchesCustomRule(rule, ctx){
+  if(!ctx.ext) return false;
+  const field = rule.field==='name' ? (ctx.name||'') : (ctx.ext.version||'');
+  const val = rule.value||'';
+  switch(rule.operator){
+    case 'equals': return field===val;
+    case 'notEquals': return field!==val;
+    case 'contains': return !!val && field.toLowerCase().includes(val.toLowerCase());
+    case 'startsWith': return !!val && field.toLowerCase().startsWith(val.toLowerCase());
+    case 'regex': try{ return new RegExp(val,'i').test(field); }catch(e){ return false; }
+    default: return false;
+  }
+}
+const CUSTOM_STATUS_COLORS = { success:'active', warning:'pending', danger:'danger', info:'drafting', neutral:'obsolete' };
+// Determines the single status badge for one (extension, environment) cell,
+// relative to the configured basis environment. Evaluation order: admin-defined
+// custom rules first (first match wins), then the historical checks (Downgraded
+// / Removed — these depend on this env's own snapshot history, not the basis),
+// then the basis-relative checks (Missing, Not Updated, Latest Version).
+function computeCellStatus(name, env, result, basisResult, basisEnv, em, histMap){
+  const ext = result && result.ok ? (result.extensions||[]).find(x=>x.name===name) : null;
+  const basisExt = basisResult && basisResult.ok ? (basisResult.extensions||[]).find(x=>x.name===name) : null;
+  const isBasisEnv = !!(basisEnv && env.id===basisEnv.id);
+
+  for(const rule of (em.customStatuses||[])){
+    if(matchesCustomRule(rule, {name, ext})){
+      return {key:'custom', label:rule.label||'Custom', cls:CUSTOM_STATUS_COLORS[rule.color]||'obsolete', detail:rule.label};
+    }
+  }
+
+  const hist = histMap ? (histMap.get(name) || {lastVersion:null, everPresent:false}) : {lastVersion:null, everPresent:false};
+
+  if(!ext){
+    if(hist.everPresent) return {key:'removed', label:'Removed Extension', cls:'obsolete', detail:`Was installed (last seen version ${hist.lastVersion||'—'}), no longer present`};
+    if(basisExt && !isBasisEnv) return {key:'missing', label:'Missing Extension', cls:'danger', detail:`Present in ${escapeHtml(basisEnv.label||basisEnv.name)} — not installed here`};
+    return {key:'none', label:'—', cls:'obsolete', muted:true};
+  }
+
+  if(hist.lastVersion && ext.version && compareVersions(ext.version, hist.lastVersion) < 0){
+    return {key:'downgraded', label:'Downgraded Version', cls:'danger', detail:`Was ${hist.lastVersion}, now ${ext.version}`};
+  }
+
+  if(isBasisEnv || !basisExt){
+    return {key:'latest', label:'Latest Version', cls:'active', detail:ext.version||''};
+  }
+  if((ext.version||'')===(basisExt.version||'')){
+    return {key:'latest', label:'Latest Version', cls:'active', detail:ext.version||''};
+  }
+  const cmp = compareVersions(ext.version, basisExt.version);
+  if(cmp < 0) return {key:'outdated', label:'Not Updated', cls:'pending', detail:`Basis is on ${basisExt.version||'—'}`};
+  return {key:'ahead', label:'Ahead of Basis', cls:'drafting', detail:`Basis is on ${basisExt.version||'—'}`};
 }
 // bcGetToken/bcFetchExtensions/runExtensionSnapshot/scheduleExtensionSnapshot were removed —
 // direct browser-to-BC calls can never succeed (CORS on the Microsoft identity
@@ -2139,7 +2255,7 @@ function saveData(data) {
 }
 
 function pruneSnapshots(data) {
-  const days = (data.settings && data.settings.retentionDays) || 7;
+  const days = (data.settings && data.settings.retentionDays) || 35;
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   data.snapshots = (data.snapshots || []).filter((s) => new Date(s.timestamp).getTime() >= cutoff);
 }
@@ -2264,7 +2380,7 @@ async function pushExtSnapshotAutomationToGithub(){
 
 function viewExtMgmt(){
   const em = extMgmtSettings();
-  const prod = prodEnv();
+  const basis = getBasisEnv(em);
   const snap = latestSnapshot();
   const tab = state.extmgmtTab || 'current';
   const configured = !!(em.clientId && em.tenantId && em.environments.length);
@@ -2274,17 +2390,18 @@ function viewExtMgmt(){
       ${em.lastRunAt
         ? `Last sync: ${timeAgo(em.lastRunAt)} — ${em.lastRunStatus==='error'?`<span style="color:var(--danger);">issues: ${escapeHtml(em.lastRunError||'')}</span>`:'<span style="color:var(--success);">success</span>'}`
         : configured ? 'No sync has run yet.' : 'Not connected yet.'}
-      <br>Connection, environments and the GitHub Actions schedule are managed in <b>Settings &rsaquo; Extension Management</b>.
+      <br>Connection, environments, the basis environment and status rules are managed in <b>Settings &rsaquo; Extension Management</b>.
+      ${basis?` Comparison basis: <b>${escapeHtml(basis.label||basis.name)}</b>${basis.type==='production'?' (Production)':' (Sandbox)'}.`:' <span style="color:var(--warning);">No basis environment set — check one on Settings &rsaquo; Extension Management.</span>'}
     </div>
     ${can('setup','view')?`<button class="btn btn-ghost" id="goToExtSettings">${icon('settings')} Go to Settings</button>`:''}
     <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from GitHub</button>
   </div>
 
   <div class="tabs">
-    <div class="tab ${tab==='current'?'active':''}" data-exttab="current">Extension Comparison</div>
-    <div class="tab ${tab==='history'?'active':''}" data-exttab="history">7-Day History</div>
+    <div class="tab ${tab==='current'?'active':''}" data-exttab="current">All Environments — Current</div>
+    <div class="tab ${tab==='monthly'?'active':''}" data-exttab="monthly">Monthly Comparison (30 Days)</div>
   </div>
-  ${tab==='current' ? extComparisonCurrent(snap, prod, em) : extComparisonHistory(prod, em)}`;
+  ${tab==='monthly' ? extComparisonMonthly(basis, em) : extComparisonCurrent(snap, basis, em)}`;
 }
 function settingsExtMgmt(){
   const em = extMgmtSettings();
@@ -2311,7 +2428,7 @@ function settingsExtMgmt(){
     <div class="form-grid">
       <div class="form-row"><label>Tenant ID (Directory ID)</label><input type="text" id="bcTenantId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${escapeAttr(em.tenantId)}" ${canEdit?'':'disabled'}></div>
       <div class="form-row"><label>Client ID (Application ID)</label><input type="text" id="bcClientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${escapeAttr(em.clientId)}" ${canEdit?'':'disabled'}></div>
-      <div class="form-row"><label>Retention (days)</label><input type="number" id="bcRetentionDays" min="1" max="90" value="${em.retentionDays||7}" ${canEdit?'':'disabled'}></div>
+      <div class="form-row"><label>Retention (days)</label><input type="number" id="bcRetentionDays" min="1" max="90" value="${em.retentionDays||35}" ${canEdit?'':'disabled'}><span class="hint">Keep at 30+ so the Monthly Comparison tab and the historical Removed/Downgraded statuses have enough snapshot history to work with.</span></div>
     </div>
     ${isCustom?`
     <div class="form-grid">
@@ -2363,7 +2480,7 @@ function settingsExtMgmt(){
     <div class="section-title"><h3>Environments</h3><span class="hint">One row per BC environment name, exactly as it appears in the Admin Center</span></div>
     <div class="table-wrap">
     <table>
-      <thead><tr><th>Environment Name</th><th>Display Label</th><th>Type</th>${isCustom?'<th>Company ID</th>':''}<th></th></tr></thead>
+      <thead><tr><th>Environment Name</th><th>Display Label</th><th>Type</th>${isCustom?'<th>Company ID</th>':''}<th style="text-align:center;">Basis</th><th></th></tr></thead>
       <tbody id="bcEnvRows">
         ${(em.environments||[]).map(e=>`
         <tr data-envid="${e.id}">
@@ -2376,17 +2493,75 @@ function settingsExtMgmt(){
             </select>
           </td>
           ${isCustom?`<td><input type="text" class="env-companyid mono" placeholder="00000000-0000-0000-0000-000000000000" value="${escapeAttr(e.companyId||'')}" ${canEdit?'':'disabled'}></td>`:''}
+          <td style="text-align:center;"><input type="checkbox" class="env-basis" data-envid="${e.id}" ${(em.basisEnvId ? em.basisEnvId===e.id : e.type==='production')?'checked':''} ${canEdit?'':'disabled'} title="Use this environment as the comparison baseline"></td>
           <td style="text-align:right;">${canEdit?`<button class="btn btn-icon btn-sm btn-ghost" data-delenv="${e.id}">${icon('trash')}</button>`:''}</td>
-        </tr>`).join('') || `<tr><td colspan="${isCustom?5:4}" style="color:var(--text-faint);">No environments added yet.</td></tr>`}
+        </tr>`).join('') || `<tr><td colspan="${isCustom?6:5}" style="color:var(--text-faint);">No environments added yet.</td></tr>`}
       </tbody>
     </table>
     </div>
-    ${isCustom?`<p style="font-size:11.5px;color:var(--text-faint);margin-top:10px;">Find a company's ID by calling the standard <span class="mono">.../api/v2.0/companies</span> endpoint for that environment, or from Business Central's own company URL.</p>`:''}
+    <p style="font-size:11.5px;color:var(--text-faint);margin-top:10px;">Check exactly one environment as <b>Basis</b> — that's what every status (Latest Version, Not Updated, Missing Extension, etc.) is compared against on the Extension Management Comparison page. Checking a box unchecks the others; this is independent of the Production/Sandbox Type, though it's usually the same environment. If none is checked, the environment typed Production is used.</p>
+    ${isCustom?`<p style="font-size:11.5px;color:var(--text-faint);margin-top:6px;">Find a company's ID by calling the standard <span class="mono">.../api/v2.0/companies</span> endpoint for that environment, or from Business Central's own company URL.</p>`:''}
     ${canEdit?`<div style="display:flex;gap:10px;margin-top:12px;"><button class="btn" id="addBcEnv">${icon('plus')} Add Environment</button><button class="btn btn-primary" id="saveBcEnvs">Save Environments</button></div>`:''}
   </div>
-  <p style="font-size:11.5px;color:var(--text-faint);">The comparison presentation itself — current snapshot vs Production, and the 7-day trend — lives on the <b>Extension Management Comparison</b> page in the sidebar.</p>`;
+
+  <div class="card" style="margin-bottom:18px;">
+    <div class="section-title"><h3>Comparison Status Rules</h3><span class="hint">Optional extra statuses layered on top of the built-in ones (Latest Version, Not Updated, Missing, Removed, Downgraded)</span></div>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Each rule checks one installed extension's name or version against a condition; the first matching rule wins for that cell, taking priority over the built-in statuses. Use this for things the built-ins don't cover — e.g. flag pre-release builds, a specific version you're watching, or a naming pattern.</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Label</th><th>Field</th><th>Condition</th><th>Value</th><th>Color</th><th></th></tr></thead>
+      <tbody id="extStatusRuleRows">
+        ${(em.customStatuses||[]).map(r=>`
+        <tr data-ruleid="${r.id}">
+          <td><input type="text" class="rule-label" placeholder="e.g. Pre-release" value="${escapeAttr(r.label||'')}" ${canEdit?'':'disabled'}></td>
+          <td>
+            <select class="rule-field" ${canEdit?'':'disabled'}>
+              <option value="version" ${r.field!=='name'?'selected':''}>Version</option>
+              <option value="name" ${r.field==='name'?'selected':''}>Extension Name</option>
+            </select>
+          </td>
+          <td>
+            <select class="rule-operator" ${canEdit?'':'disabled'}>
+              <option value="equals" ${r.operator==='equals'?'selected':''}>Equals</option>
+              <option value="notEquals" ${r.operator==='notEquals'?'selected':''}>Not equals</option>
+              <option value="contains" ${(!r.operator||r.operator==='contains')?'selected':''}>Contains</option>
+              <option value="startsWith" ${r.operator==='startsWith'?'selected':''}>Starts with</option>
+              <option value="regex" ${r.operator==='regex'?'selected':''}>Matches regex</option>
+            </select>
+          </td>
+          <td><input type="text" class="rule-value mono" placeholder="e.g. beta" value="${escapeAttr(r.value||'')}" ${canEdit?'':'disabled'}></td>
+          <td>
+            <select class="rule-color" ${canEdit?'':'disabled'}>
+              <option value="success" ${r.color==='success'?'selected':''}>Green</option>
+              <option value="warning" ${(!r.color||r.color==='warning')?'selected':''}>Amber</option>
+              <option value="danger" ${r.color==='danger'?'selected':''}>Red</option>
+              <option value="info" ${r.color==='info'?'selected':''}>Blue</option>
+              <option value="neutral" ${r.color==='neutral'?'selected':''}>Grey</option>
+            </select>
+          </td>
+          <td style="text-align:right;">${canEdit?`<button class="btn btn-icon btn-sm btn-ghost" data-delrule="${r.id}">${icon('trash')}</button>`:''}</td>
+        </tr>`).join('') || `<tr><td colspan="6" style="color:var(--text-faint);">No custom status rules yet — the built-in statuses (Latest Version, Not Updated, Missing, Removed, Downgraded) always apply.</td></tr>`}
+      </tbody>
+    </table>
+    </div>
+    ${canEdit?`<div style="display:flex;gap:10px;margin-top:12px;"><button class="btn" id="addExtStatusRule">${icon('plus')} Add Status Rule</button><button class="btn btn-primary" id="saveExtStatusRules">Save Status Rules</button></div>`:''}
+  </div>
+  <p style="font-size:11.5px;color:var(--text-faint);">The comparison presentation itself — current snapshot vs the basis environment, and the 30-day monthly trend — lives on the <b>Extension Management Comparison</b> page in the sidebar.</p>`;
 }
-function extComparisonCurrent(snap, prod, em){
+function extStatusLegend(em){
+  const customChips = (em.customStatuses||[]).map(r=>`<span class="badge ${CUSTOM_STATUS_COLORS[r.color]||'obsolete'}" style="margin-right:4px;">${escapeHtml(r.label||'Custom')}</span>`).join(' ');
+  return `<p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);line-height:2.1;">
+    <span class="badge active" style="margin-right:4px;">Latest Version</span> matches the basis environment (or is the basis itself) &nbsp;
+    <span class="badge pending" style="margin-right:4px;">Not Updated</span> installed, but behind the basis environment's version &nbsp;
+    <span class="badge drafting" style="margin-right:4px;">Ahead of Basis</span> installed here on a newer version than the basis &nbsp;
+    <span class="badge danger" style="margin-right:4px;">Missing Extension</span> present in the basis environment but not installed here &nbsp;
+    <span class="badge obsolete" style="margin-right:4px;">Removed Extension</span> was installed in a prior snapshot of this environment, no longer present &nbsp;
+    <span class="badge danger" style="margin-right:4px;">Downgraded Version</span> current version is lower than a version previously seen here
+    ${customChips?`&nbsp; ${customChips}`:''}
+    ${em.customStatuses&&em.customStatuses.length?'':' &nbsp; <span style="color:var(--text-faint);">(add more under Settings &rsaquo; Extension Management &rsaquo; Comparison Status Rules)</span>'}
+  </p>`;
+}
+function extComparisonCurrent(snap, basis, em){
   if(!snap){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
       ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet. Configure the connection and environments above, then click <b>Run Sync Now</b>.</p>
@@ -2394,20 +2569,24 @@ function extComparisonCurrent(snap, prod, em){
   }
   const envs = em.environments||[];
   const ordered = [...envs.filter(e=>e.type==='production'), ...envs.filter(e=>e.type!=='production')];
-  const resultsByEnv = {};
-  ordered.forEach(e=>{ resultsByEnv[e.id] = envResult(snap, e.id); });
-  const prodResult = prod ? resultsByEnv[prod.id] : null;
+  const resultsByEnv = {}, histByEnv = {};
+  ordered.forEach(e=>{ resultsByEnv[e.id] = envResult(snap, e.id); histByEnv[e.id] = buildEnvHistoryMap(e.id, snap); });
+  const basisResult = basis ? resultsByEnv[basis.id] : null;
   const allNames = new Set();
   ordered.forEach(e=>{ const r = resultsByEnv[e.id]; if(r && r.ok) (r.extensions||[]).forEach(x=>allNames.add(x.name)); });
   const names = [...allNames].sort((a,b)=>a.localeCompare(b));
   return `
   <div class="card" style="padding:0;">
-    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('layers')} Installed Extensions by Environment</h3><span class="hint">Snapshot captured ${timeAgo(snap.timestamp)}${prod?` — differences shown relative to ${escapeHtml(prod.label||prod.name)}`:' — mark one environment as Production above to enable comparison'}</span></div>
+    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('layers')} Installed Extensions — All Environments</h3><span class="hint">Snapshot captured ${timeAgo(snap.timestamp)}${basis?` — differences shown relative to ${escapeHtml(basis.label||basis.name)}`:' — check a Basis environment on Settings above to enable comparison'}</span></div>
     <div class="table-wrap">
     <table>
       <thead><tr>
         <th>Extension</th>
-        ${ordered.map(e=>`<th>${escapeHtml(e.label||e.name)}${e.type==='production'?` <span class="badge active" style="margin-left:4px;">Prod</span>`:''}${resultsByEnv[e.id]&&!resultsByEnv[e.id].ok?` <span class="badge pending" style="margin-left:4px;">sync error</span>`:''}</th>`).join('')}
+        ${ordered.map(e=>`<th>${escapeHtml(e.label||e.name)}
+          ${e.type==='production'?` <span class="badge active" style="margin-left:4px;">Production</span>`:` <span class="badge drafting" style="margin-left:4px;">Sandbox</span>`}
+          ${basis&&e.id===basis.id?` <span class="badge pending" style="margin-left:4px;">Basis</span>`:''}
+          ${resultsByEnv[e.id]&&!resultsByEnv[e.id].ok?` <span class="badge danger" style="margin-left:4px;">sync error</span>`:''}
+        </th>`).join('')}
       </tr></thead>
       <tbody>
       ${names.length ? names.map(name=>`
@@ -2416,65 +2595,60 @@ function extComparisonCurrent(snap, prod, em){
           ${ordered.map(e=>{
             const r = resultsByEnv[e.id];
             if(!r || !r.ok) return `<td style="color:var(--text-faint);">—</td>`;
+            const st = computeCellStatus(name, e, r, basisResult, basis, em, histByEnv[e.id]);
+            if(st.key==='none') return `<td style="color:var(--text-faint);">—</td>`;
             const ext = (r.extensions||[]).find(x=>x.name===name);
-            const prodExt = prodResult && prodResult.ok ? (prodResult.extensions||[]).find(x=>x.name===name) : null;
-            if(!ext) return `<td><span class="badge obsolete">Not installed</span></td>`;
-            if(e.type==='production' || !prodExt) return `<td><span class="badge ${prodExt?'active':'drafting'}">${escapeHtml(ext.version||'—')}</span></td>`;
-            if(prodExt.version===ext.version) return `<td><span class="badge active">${escapeHtml(ext.version||'—')}</span></td>`;
-            return `<td><span class="badge pending" title="Production: ${escapeAttr(prodExt.version||'—')}">${escapeHtml(ext.version||'—')} ≠</span></td>`;
+            const versionTxt = ext&&ext.version ? escapeHtml(ext.version) : '';
+            return `<td><span class="badge ${st.cls}" title="${escapeAttr(st.detail||st.label)}">${versionTxt?`${versionTxt} — `:''}${escapeHtml(st.label)}</span></td>`;
           }).join('')}
         </tr>`).join('') : `<tr><td colspan="${ordered.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">No extensions returned in the latest snapshot.</td></tr>`}
       </tbody>
     </table>
     </div>
   </div>
-  <p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">
-    <span class="badge active" style="margin-right:4px;">version</span> matches Production &nbsp;
-    <span class="badge pending" style="margin-right:4px;">version ≠</span> installed, but on a different version than Production &nbsp;
-    <span class="badge drafting" style="margin-right:4px;">version</span> installed here only, no Production environment configured to compare against &nbsp;
-    <span class="badge obsolete" style="margin-right:4px;">Not installed</span> present in Production but missing here.
-  </p>`;
+  ${extStatusLegend(em)}`;
 }
-function extComparisonHistory(prod, em){
-  const days = snapshotsLastNDays();
+function extComparisonMonthly(basis, em){
+  const days = snapshotsLastNDays(30);
   if(!days.length){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
       ${icon('history')}<p style="margin-top:10px;font-size:13px;">No history yet — a snapshot is captured automatically once a day, or run a manual sync above.</p>
     </div>`;
   }
-  const envs = (em.environments||[]).filter(e=>e.type!=='production');
+  const envs = (em.environments||[]).filter(e=>!basis || e.id!==basis.id);
   return `
   <div class="card" style="padding:0;">
-    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('history')} Sandbox vs Production — Last ${em.retentionDays||7} Day(s)</h3><span class="hint">Extensions differing from Production (missing, version mismatch, or sandbox-only) on each captured day</span></div>
+    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('history')} Each Environment vs Basis — Last ${days.length} Captured Day(s) (up to 30)</h3><span class="hint">Extensions differing from the basis environment (missing, not updated, removed, downgraded, or environment-only) on each captured day</span></div>
     <div class="table-wrap">
     <table>
       <thead><tr><th>Environment</th>${days.map(s=>`<th>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</th>`).join('')}</tr></thead>
       <tbody>
-      ${(!prod) ? `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Mark one environment as Production above to enable this comparison.</td></tr>`
+      ${(!basis) ? `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Check a Basis environment on Settings &rsaquo; Extension Management to enable this comparison.</td></tr>`
       : envs.length ? envs.map(env=>`
         <tr>
-          <td style="font-weight:600;">${escapeHtml(env.label||env.name)}</td>
+          <td style="font-weight:600;">${escapeHtml(env.label||env.name)}${env.type==='production'?` <span class="badge active" style="margin-left:4px;">Production</span>`:` <span class="badge drafting" style="margin-left:4px;">Sandbox</span>`}</td>
           ${days.map(s=>{
-            const prodR = envResult(s, prod.id);
+            const basisR = envResult(s, basis.id);
             const envR = envResult(s, env.id);
-            if(!envR || !envR.ok || !prodR || !prodR.ok) return `<td style="color:var(--text-faint);">—</td>`;
-            const diff = diffExtensions(prodR.extensions, envR.extensions);
-            const n = diff.missing.length + diff.versionMismatch.length + diff.extra.length;
-            const title = [
-              diff.missing.length?`Missing: ${diff.missing.join(', ')}`:'',
-              diff.versionMismatch.length?`Version mismatch: ${diff.versionMismatch.join(', ')}`:'',
-              diff.extra.length?`Sandbox-only: ${diff.extra.join(', ')}`:'',
-            ].filter(Boolean).join(' | ');
-            const cls = n===0 ? 'active' : 'pending';
-            const extraStyle = n>=3 ? 'background:var(--danger-soft);color:var(--danger);' : '';
-            return `<td><span class="badge ${cls}" style="${extraStyle}" title="${escapeAttr(title||'No differences')}">${n===0?'In sync':`${n} diff${n===1?'':'s'}`}</span></td>`;
+            if(!envR || !envR.ok || !basisR || !basisR.ok) return `<td style="color:var(--text-faint);">—</td>`;
+            const histMap = buildEnvHistoryMap(env.id, s);
+            const names = new Set([...(basisR.extensions||[]).map(x=>x.name), ...(envR.extensions||[]).map(x=>x.name)]);
+            const counts = {missing:0, outdated:0, removed:0, downgraded:0, custom:0};
+            const titleParts = [];
+            names.forEach(name=>{
+              const st = computeCellStatus(name, env, envR, basisR, basis, em, histMap);
+              if(st.key in counts){ counts[st.key]++; titleParts.push(`${st.label}: ${name}`); }
+            });
+            const n = counts.missing+counts.outdated+counts.removed+counts.downgraded+counts.custom;
+            const cls = n===0 ? 'active' : (counts.downgraded||counts.removed||counts.missing) ? 'danger' : 'pending';
+            return `<td><span class="badge ${cls}" title="${escapeAttr(titleParts.join(' | ')||'No differences')}">${n===0?'In sync':`${n} diff${n===1?'':'s'}`}</span></td>`;
           }).join('')}
-        </tr>`).join('') : `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Add a sandbox environment to compare.</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="${days.length+1}" style="color:var(--text-faint);text-align:center;padding:24px;">Add another environment to compare against the basis.</td></tr>`}
       </tbody>
     </table>
     </div>
   </div>
-  <p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Hover a badge to see which extensions differ. Days without a captured snapshot, or without a successful Production/sandbox read, show as "—".</p>`;
+  <p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Hover a badge to see which extensions differ and why. Counts include Missing, Not Updated, Removed, Downgraded and matching custom statuses. Days without a captured snapshot, or without a successful basis/environment read, show as "—". Snapshots are kept for the configured retention window (Settings &rsaquo; Extension Management), capped at 30 days here.</p>`;
 }
 
 /* ======================================================================
@@ -3095,7 +3269,7 @@ function attachContentHandlers(){
     const em = extMgmtSettings();
     em.tenantId = document.getElementById('bcTenantId').value.trim();
     em.clientId = document.getElementById('bcClientId').value.trim();
-    em.retentionDays = Math.max(1, parseInt(document.getElementById('bcRetentionDays').value, 10) || 7);
+    em.retentionDays = Math.max(1, parseInt(document.getElementById('bcRetentionDays').value, 10) || 35);
     em.apiMode = document.getElementById('bcApiMode').value;
     const pubEl = document.getElementById('bcApiPublisher'), grpEl = document.getElementById('bcApiGroup'), verEl = document.getElementById('bcApiVersion');
     if(pubEl) em.apiPublisher = pubEl.value.trim();
@@ -3150,6 +3324,14 @@ function attachContentHandlers(){
     try{ await saveExtMgmtToGithub(`Add environment row (${new Date().toISOString()})`); }
     catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
   });
+  // Basis checkbox behaves like a radio button — checking one unchecks the
+  // others — but stays a plain checkbox in the markup per the requested UI,
+  // and only three of them can exist per environment row at once anyway.
+  document.querySelectorAll('.env-basis').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) document.querySelectorAll('.env-basis').forEach(other=>{ if(other!==cb) other.checked=false; });
+    });
+  });
   const saveBcEnvs = document.getElementById('saveBcEnvs');
   if(saveBcEnvs) saveBcEnvs.addEventListener('click', async ()=>{
     document.querySelectorAll('#bcEnvRows tr[data-envid]').forEach(row=>{
@@ -3161,6 +3343,8 @@ function attachContentHandlers(){
       const companyEl = row.querySelector('.env-companyid');
       if(companyEl) env.companyId = companyEl.value.trim();
     });
+    const checkedBasis = document.querySelector('.env-basis:checked');
+    extMgmtSettings().basisEnvId = checkedBasis ? checkedBasis.dataset.envid : '';
     const original = saveBcEnvs.textContent;
     saveBcEnvs.disabled = true; saveBcEnvs.textContent = 'Saving…';
     try{
@@ -3177,8 +3361,50 @@ function attachContentHandlers(){
     el.addEventListener('click', async ()=>{
       const em = extMgmtSettings();
       em.environments = em.environments.filter(e=>e.id!==el.dataset.delenv);
+      if(em.basisEnvId===el.dataset.delenv) em.basisEnvId = '';
       render();
       try{ await saveExtMgmtToGithub(`Remove environment (${new Date().toISOString()})`); toast('Environment removed.', 'danger'); }
+      catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
+    });
+  });
+  const addExtStatusRule = document.getElementById('addExtStatusRule');
+  if(addExtStatusRule) addExtStatusRule.addEventListener('click', async ()=>{
+    const em = extMgmtSettings();
+    em.customStatuses = em.customStatuses || [];
+    em.customStatuses.push({id:uid(), label:'', field:'version', operator:'contains', value:'', color:'warning'});
+    render();
+    try{ await saveExtMgmtToGithub(`Add status rule (${new Date().toISOString()})`); }
+    catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
+  });
+  const saveExtStatusRules = document.getElementById('saveExtStatusRules');
+  if(saveExtStatusRules) saveExtStatusRules.addEventListener('click', async ()=>{
+    document.querySelectorAll('#extStatusRuleRows tr[data-ruleid]').forEach(row=>{
+      const rule = (extMgmtSettings().customStatuses||[]).find(r=>r.id===row.dataset.ruleid);
+      if(!rule) return;
+      rule.label = row.querySelector('.rule-label').value.trim();
+      rule.field = row.querySelector('.rule-field').value;
+      rule.operator = row.querySelector('.rule-operator').value;
+      rule.value = row.querySelector('.rule-value').value.trim();
+      rule.color = row.querySelector('.rule-color').value;
+    });
+    const original = saveExtStatusRules.textContent;
+    saveExtStatusRules.disabled = true; saveExtStatusRules.textContent = 'Saving…';
+    try{
+      await saveExtMgmtToGithub(`Update status rules (${new Date().toISOString()})`);
+      log('Updated','github', EXTMGMT_DATA_PATH, 'Extension Management comparison status rules');
+      toast('Status rules saved to GitHub.', 'success');
+    }catch(err){
+      toast(`Could not save to GitHub: ${err.message}`, 'danger');
+    }
+    saveExtStatusRules.disabled = false; saveExtStatusRules.textContent = original;
+    render();
+  });
+  document.querySelectorAll('[data-delrule]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const em = extMgmtSettings();
+      em.customStatuses = (em.customStatuses||[]).filter(r=>r.id!==el.dataset.delrule);
+      render();
+      try{ await saveExtMgmtToGithub(`Remove status rule (${new Date().toISOString()})`); toast('Status rule removed.', 'danger'); }
       catch(err){ toast(`Could not save to GitHub: ${err.message}`, 'danger'); }
     });
   });
