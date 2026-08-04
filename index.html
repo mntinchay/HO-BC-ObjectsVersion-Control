@@ -239,9 +239,6 @@ tbody tr.clickable:hover{background:var(--surface-2);cursor:pointer;}
 .ext-filter-list label input{margin:0;}
 .ext-filter-empty{font-size:11.5px;color:var(--text-faint);padding:6px 2px;}
 .ext-filter-footer{display:flex;justify-content:flex-end;gap:8px;}
-.ext-range-bar{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
-.ext-range-bar .form-row{margin:0;}
-.ext-range-bar label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;}
 .ext-sticky-col{position:sticky;left:0;z-index:4;background:var(--surface-solid);}
 
 .empty-row td{text-align:center;color:var(--text-faint);padding:36px 12px;font-size:12.5px;}
@@ -802,7 +799,7 @@ const state = {
   extFilterOpen:null, // which filter dropdown is currently open: 'name' | 'publisher' | null
   // Monthly Comparison — date range (yyyy-mm-dd strings) and the single captured
   // day currently shown in the detailed extension x environment grid.
-  extRangeFrom:'', extRangeTo:'', extMonthlyDay:'', extMonthlyEnvId:'', extFilterSearch:'',
+  extMonthlyDay:'', extMonthlyEnvId:'', extFilterSearch:'',
 };
 // Registered once (not inside render/attachHandlers, which run on every
 // re-render) — closes an open Excel-style filter dropdown when clicking
@@ -2553,18 +2550,18 @@ function viewExtMgmt(){
       ${em.lastRunAt
         ? `Last sync: ${timeAgo(em.lastRunAt)} — ${em.lastRunStatus==='error'?`<span style="color:var(--danger);">issues: ${escapeHtml(em.lastRunError||'')}</span>`:'<span style="color:var(--success);">success</span>'}`
         : configured ? 'No sync has run yet.' : 'Not connected yet.'}
-      <br>Connection, environments, the basis environment and status rules are managed in <b>Settings &rsaquo; Extension Management</b>.
-      ${basis?` Comparison basis: <b>${escapeHtml(basis.label||basis.name)}</b>${basis.type==='production'?' (Production)':' (Sandbox)'}.`:' <span style="color:var(--warning);">No basis environment set — check one on Settings &rsaquo; Extension Management.</span>'}
+      ${basis?` &nbsp;Basis: <b>${escapeHtml(basis.label||basis.name)}</b>`:' <span style="color:var(--warning);">No basis environment set.</span>'}
     </div>
     ${can('setup','view')?`<button class="btn btn-ghost" id="goToExtSettings">${icon('settings')} Go to Settings</button>`:''}
     <button class="btn btn-ghost" id="refreshExtDb">${icon('history')} Refresh from GitHub</button>
   </div>
 
   <div class="tabs">
-    <div class="tab ${tab==='current'?'active':''}" data-exttab="current">All Environments — Current</div>
-    <div class="tab ${tab==='monthly'?'active':''}" data-exttab="monthly">Monthly Comparison</div>
+    <div class="tab ${tab==='current'?'active':''}" data-exttab="current">Current Installed Extensions</div>
+    <div class="tab ${tab==='monthly'?'active':''}" data-exttab="monthly">Month-To-Date Installed Extensions (Per Environment)</div>
+    <div class="tab ${tab==='todate'?'active':''}" data-exttab="todate">To-Date Installed Extensions</div>
   </div>
-  ${tab==='monthly' ? extComparisonMonthly(basis, em) : extComparisonCurrent(snap, basis, em)}`;
+  ${tab==='monthly' ? extComparisonMonthToDate(basis, em) : tab==='todate' ? extComparisonToDate(basis, em) : extComparisonCurrent(snap, basis, em)}`;
 }
 function settingsExtMgmt(){
   const em = extMgmtSettings();
@@ -2714,26 +2711,21 @@ function settingsExtMgmt(){
 function extStatusLegend(em){
   const customChips = (em.customStatuses||[]).map(r=>`<span class="badge ${CUSTOM_STATUS_COLORS[r.color]||'obsolete'}" style="margin-right:4px;">${escapeHtml(r.label||'Custom')}</span>`).join(' ');
   return `<p style="margin-top:14px;font-size:11.5px;color:var(--text-faint);line-height:2.1;">
-    <span class="badge active" style="margin-right:4px;">Latest Version</span> matches the basis environment (or is the basis itself) &nbsp;
-    <span class="badge pending" style="margin-right:4px;">Not Updated</span> installed, but behind the basis environment's version &nbsp;
-    <span class="badge drafting" style="margin-right:4px;">Ahead of Basis</span> installed here on a newer version than the basis &nbsp;
-    <span class="badge danger" style="margin-right:4px;">Missing Extension</span> present in the basis environment but not installed here &nbsp;
-    <span class="badge obsolete" style="margin-right:4px;">Removed Extension</span> was installed in a prior snapshot of this environment, no longer present &nbsp;
-    <span class="badge danger" style="margin-right:4px;">Downgraded Version</span> current version is lower than a version previously seen here
-    ${customChips?`&nbsp; ${customChips}`:''}
-    ${em.customStatuses&&em.customStatuses.length?'':' &nbsp; <span style="color:var(--text-faint);">(add more under Settings &rsaquo; Extension Management &rsaquo; Comparison Status Rules)</span>'}
+    <span class="badge active" style="margin-right:4px;">Latest Version</span>
+    <span class="badge pending" style="margin-right:4px;">Not Updated</span>
+    <span class="badge drafting" style="margin-right:4px;">Ahead of Basis</span>
+    <span class="badge danger" style="margin-right:4px;">Missing Extension</span>
+    <span class="badge obsolete" style="margin-right:4px;">Removed Extension</span>
+    <span class="badge danger" style="margin-right:4px;">Downgraded Version</span>
+    ${customChips}
   </p>`;
 }
-// Shared "Installed Extensions" grid — used by both the Current tab and the
-// per-day detail view on the Monthly tab. Column order: Extension Name
-// (pinned first, with filter) -> Publisher Name (with filter) -> Basis
-// environment (if one is set) -> every other environment, each showing its
-// own "as of <date>" last-updated stamp. Wrapped in a fixed-height scroller
-// so only the table scrolls (both axes), never the page.
+// Shared "Installed Extensions" grid: Extension Name -> Publisher Name ->
+// Basis -> other environments.
 function extGridTable(snap, basis, em){
   if(!snap){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
-      ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet. Configure the connection and environments above, then click <b>Run Sync Now</b>.</p>
+      ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet.</p>
     </div>`;
   }
   const envs = em.environments||[];
@@ -2789,7 +2781,7 @@ function extGridTable(snap, basis, em){
           return `<td><span class="badge ${st.cls}" title="${escapeAttr(st.detail||st.label)}">${versionTxt?`${versionTxt} — `:''}${escapeHtml(st.label)}</span></td>`;
         }).join('')}
       </tr>`;
-    }).join('') : `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">${allNames.size?'No extensions match the current filters.':'No extensions returned in this snapshot.'}</td></tr>`}
+    }).join('') : `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">${allNames.size?'No matches.':'No extensions in this snapshot.'}</td></tr>`}
     </tbody>
   </table>
   </div>`;
@@ -2797,68 +2789,23 @@ function extGridTable(snap, basis, em){
 function extComparisonCurrent(snap, basis, em){
   if(!snap){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
-      ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet. Configure the connection and environments above, then click <b>Run Sync Now</b>.</p>
+      ${icon('extmgmt')}<p style="margin-top:10px;font-size:13px;">No snapshot captured yet.</p>
     </div>`;
   }
   return `
   <div class="card" style="padding:0;">
-    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('layers')} Installed Extensions — All Environments</h3><span class="hint">Snapshot captured ${timeAgo(snap.timestamp)}${basis?` — differences shown relative to ${escapeHtml(basis.label||basis.name)}`:' — check a Basis environment on Settings above to enable comparison'}</span></div>
+    <div class="section-title" style="padding:20px 20px 4px;"><h3>${icon('layers')} Current Installed Extensions</h3><span class="hint">${timeAgo(snap.timestamp)}</span></div>
     ${extGridTable(snap, basis, em)}
   </div>
   ${extStatusLegend(em)}`;
 }
-function extComparisonMonthly(basis, em){
-  const retentionDays = em.retentionDays || 35;
-  const allDays = snapshotsLastNDays(Math.min(retentionDays, 90));
-  if(!allDays.length){
+function extComparisonMonthToDate(basis, em){
+  const days = snapshotsLastNDays(30);
+  if(!days.length){
     return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
-      ${icon('history')}<p style="margin-top:10px;font-size:13px;">No history yet — a snapshot is captured automatically once a day, or run a manual sync above.</p>
+      ${icon('history')}<p style="margin-top:10px;font-size:13px;">No history yet.</p>
     </div>`;
   }
-  const earliest = allDays[0].timestamp.slice(0,10);
-  const latest = allDays[allDays.length-1].timestamp.slice(0,10);
-  // Default range: the 30 most recent captured days (or fewer if history is shorter).
-  if(!state.extRangeFrom) state.extRangeFrom = allDays[Math.max(0, allDays.length-30)].timestamp.slice(0,10);
-  if(!state.extRangeTo) state.extRangeTo = latest;
-  if(state.extRangeFrom < earliest) state.extRangeFrom = earliest;
-  if(state.extRangeTo > latest) state.extRangeTo = latest;
-  if(state.extRangeFrom > state.extRangeTo) state.extRangeFrom = state.extRangeTo;
-  const days = allDays.filter(s=>{ const d = s.timestamp.slice(0,10); return d >= state.extRangeFrom && d <= state.extRangeTo; });
-  if(!state.extMonthlyDay || !days.some(s=>s.timestamp.slice(0,10)===state.extMonthlyDay)){
-    state.extMonthlyDay = days.length ? days[days.length-1].timestamp.slice(0,10) : '';
-  }
-  const selectedSnap = days.find(s=>s.timestamp.slice(0,10)===state.extMonthlyDay) || null;
-
-  return `
-  <div class="card" style="margin-bottom:18px;">
-    <div class="ext-range-bar">
-      <div class="form-row"><label>From</label><input type="date" id="extRangeFrom" value="${state.extRangeFrom}" min="${earliest}" max="${state.extRangeTo}"></div>
-      <div class="form-row"><label>To</label><input type="date" id="extRangeTo" value="${state.extRangeTo}" min="${state.extRangeFrom}" max="${latest}"></div>
-      <span class="hint" style="padding-bottom:9px;">${days.length} captured day(s) in range (${allDays.length} available — retention ${retentionDays}d)</span>
-    </div>
-  </div>
-
-  ${extComparisonMonthlyByEnv(basis, em, days)}
-
-  <div class="card" style="padding:0;">
-    <div class="section-title" style="padding:20px 20px 4px;flex-wrap:wrap;gap:10px;">
-      <h3>${icon('layers')} Comparison of Extension — All Environments of the Selected Day</h3>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
-        <span class="hint">${selectedSnap ? `Snapshot captured ${timeAgo(selectedSnap.timestamp)}${basis?` — vs ${escapeHtml(basis.label||basis.name)}`:''}` : 'Pick a captured day.'}</span>
-        <select id="extMonthlyDaySelect" style="min-width:150px;">
-          ${days.slice().reverse().map(s=>{ const d=s.timestamp.slice(0,10); return `<option value="${d}" ${d===state.extMonthlyDay?'selected':''}>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</option>`; }).join('')}
-        </select>
-      </div>
-    </div>
-    ${extGridTable(selectedSnap, basis, em)}
-  </div>
-  ${extStatusLegend(em)}`;
-}
-// Part 1 of the Monthly Comparison: pick a single environment, then see how
-// every extension in that environment compared to the basis on each captured
-// day in the selected date range (Extension Name / Publisher Name pinned on
-// the left, one column per captured day).
-function extComparisonMonthlyByEnv(basis, em, days){
   const envs = em.environments||[];
   if(!state.extMonthlyEnvId || !envs.some(e=>e.id===state.extMonthlyEnvId)){
     const fallback = envs.find(e=>!basis || e.id!==basis.id) || envs[0] || null;
@@ -2876,13 +2823,12 @@ function extComparisonMonthlyByEnv(basis, em, days){
   const colCount = 2 + days.length;
 
   return `
-  <div class="card" style="padding:0;margin-bottom:18px;">
+  <div class="card" style="padding:0;">
     <div class="section-title" style="padding:20px 20px 4px;flex-wrap:wrap;gap:10px;">
-      <h3>${icon('history')} Monthly Comparison — Comparison of Extension per Day of the Selected Environment</h3>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;">
-        <span class="hint">${env ? `${days.length} captured day(s)${basis?` vs ${escapeHtml(basis.label||basis.name)}`:''}` : 'Pick an environment.'}</span>
+      <h3>${icon('history')} Month-To-Date Installed Extensions (Per Environment)</h3>
+      <div style="margin-left:auto;">
         <select id="extMonthlyEnvSelect" style="min-width:170px;">
-          ${envs.map(e=>`<option value="${e.id}" ${e.id===state.extMonthlyEnvId?'selected':''}>${escapeHtml(e.label||e.name)}${e.type==='production'?' (Production)':' (Sandbox)'}</option>`).join('')}
+          ${envs.map(e=>`<option value="${e.id}" ${e.id===state.extMonthlyEnvId?'selected':''}>${escapeHtml(e.label||e.name)}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -2894,8 +2840,8 @@ function extComparisonMonthlyByEnv(basis, em, days){
         ${days.map(s=>`<th>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</th>`).join('')}
       </tr></thead>
       <tbody>
-      ${!env ? `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">No environment available. Add one on Settings &rsaquo; Extension Management.</td></tr>`
-      : !basis ? `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">Check a Basis environment on Settings &rsaquo; Extension Management to enable this comparison.</td></tr>`
+      ${!env ? `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">No environment available.</td></tr>`
+      : !basis ? `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">No basis environment set.</td></tr>`
       : names.length ? names.map(name=>`
         <tr>
           <td class="ext-sticky-col" style="font-weight:600;">${escapeHtml(name)}</td>
@@ -2911,12 +2857,37 @@ function extComparisonMonthlyByEnv(basis, em, days){
             const versionTxt = ext&&ext.version ? escapeHtml(ext.version) : '';
             return `<td><span class="badge ${st.cls}" title="${escapeAttr(st.detail||st.label)}">${versionTxt?`${versionTxt} — `:''}${escapeHtml(st.label)}</span></td>`;
           }).join('')}
-        </tr>`).join('') : `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">No extensions found for this environment in the selected range.</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="${colCount}" style="color:var(--text-faint);text-align:center;padding:24px;">No extensions found.</td></tr>`}
       </tbody>
     </table>
     </div>
   </div>
-  <p style="margin-top:-14px;margin-bottom:18px;font-size:11.5px;color:var(--text-faint);">Hover a badge to see the version and reason for its status on that day. Days without a captured snapshot, or without a successful basis/environment read, show as "—".</p>`;
+  ${extStatusLegend(em)}`;
+}
+function extComparisonToDate(basis, em){
+  const days = snapshotsLastNDays(Math.min(em.retentionDays||35, 90));
+  if(!days.length){
+    return `<div class="card" style="text-align:center;padding:40px 20px;color:var(--text-faint);">
+      ${icon('history')}<p style="margin-top:10px;font-size:13px;">No history yet.</p>
+    </div>`;
+  }
+  if(!state.extMonthlyDay || !days.some(s=>s.timestamp.slice(0,10)===state.extMonthlyDay)){
+    state.extMonthlyDay = days[days.length-1].timestamp.slice(0,10);
+  }
+  const selectedSnap = days.find(s=>s.timestamp.slice(0,10)===state.extMonthlyDay) || null;
+  return `
+  <div class="card" style="padding:0;">
+    <div class="section-title" style="padding:20px 20px 4px;flex-wrap:wrap;gap:10px;">
+      <h3>${icon('layers')} To-Date Installed Extensions</h3>
+      <div style="margin-left:auto;">
+        <select id="extMonthlyDaySelect" style="min-width:150px;">
+          ${days.slice().reverse().map(s=>{ const d=s.timestamp.slice(0,10); return `<option value="${d}" ${d===state.extMonthlyDay?'selected':''}>${new Date(s.timestamp).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</option>`; }).join('')}
+        </select>
+      </div>
+    </div>
+    ${extGridTable(selectedSnap, basis, em)}
+  </div>
+  ${extStatusLegend(em)}`;
 }
 
 /* ======================================================================
@@ -3591,10 +3562,6 @@ function attachContentHandlers(){
   });
 
   /* ---- Extension Management: Monthly date range + day picker ---- */
-  const extRangeFrom = document.getElementById('extRangeFrom');
-  if(extRangeFrom) extRangeFrom.addEventListener('change', ()=>{ state.extRangeFrom = extRangeFrom.value; render(); });
-  const extRangeTo = document.getElementById('extRangeTo');
-  if(extRangeTo) extRangeTo.addEventListener('change', ()=>{ state.extRangeTo = extRangeTo.value; render(); });
   const extMonthlyDaySelect = document.getElementById('extMonthlyDaySelect');
   if(extMonthlyDaySelect) extMonthlyDaySelect.addEventListener('change', ()=>{ state.extMonthlyDay = extMonthlyDaySelect.value; render(); });
   const extMonthlyEnvSelect = document.getElementById('extMonthlyEnvSelect');
