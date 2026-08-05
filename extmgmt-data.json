@@ -30,6 +30,13 @@
         "label": "Membership_Envi_D251123",
         "companyId": "0ab67702-3f46-ee11-b18d-b6f29f9adee5",
         "type": "production"
+      },
+      {
+        "id": "vxx0antwk69m",
+        "name": "",
+        "label": "",
+        "companyId": "",
+        "type": "sandbox"
       }
     ],
     "retentionDays": 7,
