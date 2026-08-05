@@ -33,14 +33,14 @@
       },
       {
         "id": "vxx0antwk69m",
-        "name": "",
-        "label": "",
-        "companyId": "",
-        "type": "sandbox"
+        "name": "Production",
+        "label": "Production",
+        "companyId": "0ab67702-3f46-ee11-b18d-b6f29f9adee5",
+        "type": "production"
       }
     ],
     "retentionDays": 7,
-    "basisEnvId": "0vbo0nuw1cyb",
+    "basisEnvId": "vxx0antwk69m",
     "customStatuses": [],
     "lastRunAt": "2026-08-04T17:49:33.790Z",
     "lastRunStatus": "success",
