@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-03T09:24:37.954Z",
+  "generatedAt": "2026-08-05T10:15:27.267Z",
   "repositories": {
     "ticket": null,
     "storecust": null,
@@ -41,7 +41,7 @@
       "typeId": "tab",
       "from": 99000,
       "to": 99999,
-      "last": 99011,
+      "last": 99018,
       "type": "TAB"
     },
     {
@@ -62,7 +62,7 @@
       "typeId": "cod",
       "from": 99000,
       "to": 99999,
-      "last": 99008,
+      "last": 99009,
       "type": "COD"
     },
     {
@@ -125,14 +125,14 @@
       "typeId": "otf0pgu",
       "from": 99000,
       "to": 99999,
-      "last": 99025,
+      "last": 99027,
       "type": "PAGEXT"
     },
     {
       "typeId": "otmowpk",
       "from": 99000,
       "to": 99999,
-      "last": 99004,
+      "last": 99005,
       "type": "TABEXT"
     },
     {
@@ -533,7 +533,7 @@
       "ownerKind": "project",
       "ownerName": "ERP AL Enh - Development Tool",
       "ownerRepo": null,
-      "version": "3.1.1.1",
+      "version": "3.2.1.0",
       "status": "active"
     },
     {
@@ -544,7 +544,7 @@
       "ownerKind": "project",
       "ownerName": "ERP AL Enh - Development Tool",
       "ownerRepo": null,
-      "version": "3.1.1.1",
+      "version": "3.2.1.0",
       "status": "active"
     },
     {
@@ -555,7 +555,7 @@
       "ownerKind": "project",
       "ownerName": "ERP AL Enh - Development Tool",
       "ownerRepo": null,
-      "version": "3.1.1.1",
+      "version": "3.2.1.0",
       "status": "active"
     },
     {
@@ -566,7 +566,51 @@
       "ownerKind": "project",
       "ownerName": "ERP AL Enh - Development Tool",
       "ownerRepo": null,
-      "version": "3.1.1.1",
+      "version": "3.2.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "TABEXT",
+      "objectId": 99005,
+      "description": "HOXT-ItemSpecGrpLink260804 ",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.2.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99026,
+      "description": "HOXT-ItemSpecGrpLink260804",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.2.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99028,
+      "description": "HOXT-LSCRetailItemList260804",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.2.1.0",
+      "status": "active"
+    },
+    {
+      "objectType": "PAGEXT",
+      "objectId": 99027,
+      "description": "HOXT-LSCRetailItem260804",
+      "owner": "PRJ-3",
+      "ownerKind": "project",
+      "ownerName": "ERP AL Enh - Development Tool",
+      "ownerRepo": null,
+      "version": "3.2.1.0",
       "status": "active"
     },
     {
